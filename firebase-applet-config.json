@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0994074643",
-  "appId": "1:729391960969:web:cf26ae6ab7b61f4ea1c758",
-  "apiKey": "AIzaSyAvlABf-xBFfHaT3U-uT3zS_ge1hMZVfP4",
-  "authDomain": "gen-lang-client-0994074643.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-681836a8-5edc-4b13-bd59-7e42c8678ef1",
-  "storageBucket": "gen-lang-client-0994074643.firebasestorage.app",
-  "messagingSenderId": "729391960969",
-  "measurementId": ""
+  "projectId": "yobombero-test",
+  "appId": "1:869273560216:web:27475a86401ac0fae99ced",
+  "apiKey": "AIzaSyDnTgQIcMmOQuSW3JMgwvPE0Avt1g7iOfM",
+  "authDomain": "yobombero-test.firebaseapp.com",
+  "firestoreDatabaseId": "",
+  "storageBucket": "yobombero-test.firebasestorage.app",
+  "messagingSenderId": "869273560216",
+  "measurementId": "G-XSF8RT27YT"
 }
