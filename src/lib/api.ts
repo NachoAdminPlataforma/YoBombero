@@ -1,0 +1,946 @@
+import { Question, SavedPrompt, ReviewHistory, TestSession, User } from '../types';
+import { GoogleGenAI, Type } from '@google/genai';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc } from 'firebase/firestore';
+import { db, auth } from './firebase';
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+async function getNextDisplayId(count: number = 1): Promise<number> {
+  const counterRef = doc(db, 'metadata', 'counters');
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      let currentId = 0;
+      if (!counterDoc.exists()) {
+        transaction.set(counterRef, { questionDisplayId: count });
+      } else {
+        currentId = counterDoc.data().questionDisplayId || 0;
+        transaction.update(counterRef, { questionDisplayId: currentId + count });
+      }
+      return currentId + 1; // Return the first ID of the reserved batch
+    });
+  } catch (e) {
+    console.error("Transaction failed: ", e);
+    return Math.floor(Math.random() * 1000000); // Fallback
+  }
+}
+
+export const api = {
+  subscribeToQuestions(userRole: 'admin' | 'student', permissions: string[], callback: (questions: Question[]) => void): () => void {
+    const q = query(collection(db, 'questions'));
+    return onSnapshot(q, (snapshot) => {
+      const questions = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Question))
+        .filter(q => userRole === 'admin' || permissions.includes(q.topic));
+      callback(questions);
+    });
+  },
+
+  subscribeToTestSessions(userId: string, callback: (sessions: TestSession[]) => void): () => void {
+    const q = query(collection(db, 'test_sessions'), where('userId', '==', userId), orderBy('completedAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TestSession));
+      callback(sessions);
+    });
+  },
+
+  subscribeToTopics(userRole: 'admin' | 'student', permissions: string[], callback: (topics: {topic: string, classification: string}[]) => void): () => void {
+    const q = query(collection(db, 'questions'));
+    return onSnapshot(q, (snapshot) => {
+      const topicsMap = new Map<string, string>();
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.topic && data.classification) {
+          if (userRole === 'admin' || permissions.includes(data.topic)) {
+            topicsMap.set(`${data.classification}::${data.topic}`, data.classification);
+          }
+        }
+      });
+      
+      const topics = Array.from(topicsMap.entries()).map(([key, classification]) => ({
+        topic: key.split('::')[1],
+        classification
+      })).sort((a, b) => {
+        const classCompare = a.classification.localeCompare(b.classification);
+        if (classCompare !== 0) return classCompare;
+        return a.topic.localeCompare(b.topic, undefined, { numeric: true, sensitivity: 'base' });
+      });
+      callback(topics);
+    });
+  },
+
+  async getAllQuestions(): Promise<Question[]> {
+    try {
+      const snapshot = await getDocs(collection(db, 'questions'));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'questions');
+      return [];
+    }
+  },
+
+  async getUrgentQuestions(userId: string, userRole: 'admin' | 'student' = 'admin', permissions: string[] = []): Promise<Question[]> {
+    const questions = await this.getAllQuestions();
+    const progress = await this.getUserProgress(userId);
+    
+    const questionsWithProgress = questions
+      .filter(q => userRole === 'admin' || permissions.includes(q.topic))
+      .map(q => ({
+        ...q,
+        ...(progress[q.id] || { hits: 0, misses: 0, reps: 0, easeFactor: 2.5, interval: 0, nextReviewDate: new Date().toISOString() })
+      }));
+
+    const now = new Date().toISOString();
+    
+    const reviewQuestions = questionsWithProgress.filter(q => 
+      (q.hits > 0 || q.misses > 0) && 
+      (q.nextReview || q.nextReviewDate) <= now
+    );
+    
+    reviewQuestions.sort((a, b) => {
+      const intA = a.interval ?? 0;
+      const intB = b.interval ?? 0;
+      if (intA !== intB) return intA - intB;
+      
+      const easeA = a.easeFactor ?? 2.5;
+      const easeB = b.easeFactor ?? 2.5;
+      if (easeA !== easeB) return easeA - easeB;
+      
+      const missesA = a.misses ?? 0;
+      const missesB = b.misses ?? 0;
+      if (missesA !== missesB) return missesB - missesA;
+      
+      const dateA = a.nextReview || a.nextReviewDate || '';
+      const dateB = b.nextReview || b.nextReviewDate || '';
+      return dateA.localeCompare(dateB);
+    });
+
+    const newQuestions = questionsWithProgress.filter(q => q.hits === 0 && q.misses === 0);
+    return [...newQuestions, ...reviewQuestions];
+  },
+
+  async getUserProgress(userId: string): Promise<Record<string, any>> {
+    try {
+      const q = query(collection(db, 'user_progress'), where('userId', '==', userId));
+      const snapshot = await getDocs(q);
+      const progress: Record<string, any> = {};
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        progress[data.questionId] = data;
+      });
+      return progress;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'user_progress');
+      return {};
+    }
+  },
+
+  async getTopics(userRole: 'admin' | 'student' = 'admin', permissions: string[] = []): Promise<{topic: string, classification: string}[]> {
+    const questions = await this.getAllQuestions();
+    const topicsMap = new Map<string, string>();
+    questions.forEach(q => {
+      if (userRole === 'admin' || permissions.includes(q.topic)) {
+        topicsMap.set(`${q.classification}::${q.topic}`, q.classification);
+      }
+    });
+    
+    return Array.from(topicsMap.entries()).map(([key, classification]) => ({
+      topic: key.split('::')[1],
+      classification
+    })).sort((a, b) => {
+      const classCompare = a.classification.localeCompare(b.classification);
+      if (classCompare !== 0) return classCompare;
+      return a.topic.localeCompare(b.topic, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  },
+
+  async getQuestionsByTopic(topic: string, classification: string): Promise<Question[]> {
+    try {
+      const q = query(collection(db, 'questions'), where('topic', '==', topic), where('classification', '==', classification));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'questions');
+      return [];
+    }
+  },
+
+  async updateTopic(oldTopic: string, oldClassification: string, newTopicName: string, newClassification: string): Promise<void> {
+    const q = query(collection(db, 'questions'), 
+      where('topic', '==', oldTopic), 
+      where('classification', '==', oldClassification)
+    );
+    const snapshot = await getDocs(q);
+    
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(document => {
+      batch.update(document.ref, { 
+        topic: newTopicName, 
+        classification: newClassification 
+      });
+    });
+    await batch.commit();
+  },
+
+  async getCustomTest(
+    userId: string,
+    userRole: 'admin' | 'student',
+    permissions: string[],
+    topics: { topic: string, classification: string, count: number }[], 
+    mode: 'srs' | 'balanced',
+    totalNum: number
+  ): Promise<Question[]> {
+    const allQuestions = await this.getAllQuestions();
+    const progress = await this.getUserProgress(userId);
+
+    const questionsWithProgress = allQuestions
+      .filter(q => userRole === 'admin' || permissions.includes(q.topic))
+      .map(q => ({
+        ...q,
+        ...(progress[q.id] || { hits: 0, misses: 0, reps: 0, easeFactor: 2.5, interval: 0, nextReviewDate: new Date().toISOString() })
+      }));
+    
+    // Filter questions that belong to any of the selected topics
+    const filteredQuestions = questionsWithProgress.filter(q => 
+      topics.some(t => t.topic === q.topic && t.classification === q.classification)
+    );
+
+    const now = new Date().toISOString();
+
+    // Helper to sort questions by SRS urgency
+    const sortByUrgency = (qs: Question[]) => {
+      return [...qs].sort((a, b) => {
+        // 1. New questions (never answered) have high priority
+        const isNewA = a.hits === 0 && a.misses === 0;
+        const isNewB = b.hits === 0 && b.misses === 0;
+        if (isNewA && !isNewB) return -1;
+        if (!isNewA && isNewB) return 1;
+
+        // 2. Due questions
+        const isDueA = (a.nextReview || a.nextReviewDate || '') <= now;
+        const isDueB = (b.nextReview || b.nextReviewDate || '') <= now;
+        if (isDueA && !isDueB) return -1;
+        if (!isDueA && isDueB) return 1;
+
+        // 3. Interval (shorter is more urgent)
+        const intA = a.interval ?? 0;
+        const intB = b.interval ?? 0;
+        if (intA !== intB) return intA - intB;
+        
+        // 4. Ease Factor (lower is harder)
+        const easeA = a.easeFactor ?? 2.5;
+        const easeB = b.easeFactor ?? 2.5;
+        if (easeA !== easeB) return easeA - easeB;
+        
+        // 5. Misses (more misses is more urgent)
+        const missesA = a.misses ?? 0;
+        const missesB = b.misses ?? 0;
+        if (missesA !== missesB) return missesB - missesA;
+
+        return 0;
+      });
+    };
+
+    let selectedQuestions: Question[] = [];
+
+    // Separate topics into manual and auto
+    const manualTopics = topics.filter(t => t.count > 0);
+    const autoTopics = topics.filter(t => t.count === 0);
+
+    // 1. Handle Manual Topics first
+    for (const t of manualTopics) {
+      const topicQs = filteredQuestions.filter(q => q.topic === t.topic && q.classification === t.classification);
+      const sorted = sortByUrgency(topicQs);
+      selectedQuestions.push(...sorted.slice(0, t.count));
+    }
+
+    // 2. Handle Auto Topics
+    if (autoTopics.length > 0) {
+      const remainingTotal = Math.max(0, totalNum - manualTopics.reduce((acc, t) => acc + t.count, 0));
+      
+      if (mode === 'balanced') {
+        const quotaPerTopic = Math.floor(remainingTotal / autoTopics.length);
+        let extra = remainingTotal % autoTopics.length;
+
+        for (const t of autoTopics) {
+          const currentQuota = quotaPerTopic + (extra > 0 ? 1 : 0);
+          extra--;
+          
+          const topicQs = filteredQuestions.filter(q => q.topic === t.topic && q.classification === t.classification);
+          const sorted = sortByUrgency(topicQs);
+          selectedQuestions.push(...sorted.slice(0, currentQuota));
+        }
+      } else {
+        // SRS Mode: Pool all questions from auto topics and pick the most urgent ones
+        const autoQs = filteredQuestions.filter(q => 
+          autoTopics.some(at => at.topic === q.topic && at.classification === q.classification)
+        );
+        const sorted = sortByUrgency(autoQs);
+        selectedQuestions.push(...sorted.slice(0, remainingTotal));
+      }
+    }
+
+    // Final shuffle to not have them strictly grouped by topic if they were added that way
+    return selectedQuestions.sort(() => 0.5 - Math.random());
+  },
+
+  async createManualQuestion(data: Partial<Question>): Promise<{ success: boolean, id: string }> {
+    const displayId = await getNextDisplayId(1);
+    const docRef = await addDoc(collection(db, 'questions'), {
+      ...data,
+      displayId,
+      hits: 0,
+      misses: 0,
+      masteryLevel: 0,
+      nextReviewDate: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      reps: 0,
+      easeFactor: 2.5,
+      interval: 0
+    });
+    return { success: true, id: docRef.id };
+  },
+
+  async importQuestions(questions: any[]): Promise<{ success: boolean, count: number }> {
+    try {
+      const questionsCol = collection(db, 'questions');
+      const startId = await getNextDisplayId(questions.length);
+      let currentId = startId;
+      const now = new Date().toISOString();
+
+      // Firestore batches have a limit of 500 operations
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < questions.length; i += BATCH_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = questions.slice(i, i + BATCH_SIZE);
+        
+        for (const qData of chunk) {
+          const newDocRef = doc(questionsCol);
+          batch.set(newDocRef, {
+            text: qData.text,
+            options: qData.options,
+            correctOptionIndex: qData.correctOptionIndex,
+            classification: qData.classification,
+            topic: qData.topic,
+            displayId: currentId++,
+            hits: 0,
+            misses: 0,
+            masteryLevel: 0,
+            nextReviewDate: now,
+            createdAt: now,
+            reps: 0,
+            easeFactor: 2.5,
+            interval: 0
+          });
+        }
+        await batch.commit();
+      }
+      
+      return { success: true, count: questions.length };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'questions');
+      return { success: false, count: 0 };
+    }
+  },
+
+  async generateAIQuestions(data: any): Promise<Question[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey) throw new Error("API Key de Gemini no configurada");
+    const ai = new GoogleGenAI({ apiKey: apiKey as string });
+    
+    let urlContent = '';
+    if (data.url) {
+      try {
+        const response = await fetch('/api/fetch-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: data.url })
+        });
+        if (response.ok) {
+          const result = await response.json();
+          urlContent = result.html;
+        } else {
+          console.warn('Failed to fetch URL content via proxy');
+        }
+      } catch (e) {
+        console.error('Error fetching URL:', e);
+      }
+    }
+
+    const existingQuestionsContext = data.existingQuestions && data.existingQuestions.length > 0
+      ? `\nPREGUNTAS YA EXISTENTES EN ESTE TEMA (PROHIBIDO REPETIR ESTOS CONCEPTOS O DATOS):\n${data.existingQuestions.map((q: any, i: number) => `${i+1}. Pregunta: ${q.text} | Respuesta Correcta: ${q.options[q.correctOptionIndex]}`).join('\n')}\n`
+      : '';
+
+    const promptText = `
+      Actúa como un experto creador y extractor de preguntas tipo test de alta dificultad.
+      
+      INSTRUCCIONES PRINCIPALES:
+      0. CORRECCIÓN DE ERRORES DE LECTURA (MUY IMPORTANTE): El texto fuente (especialmente si es un PDF) contiene errores de codificación donde las letras con tilde o la 'ñ' han sido reemplazadas por números (por ejemplo: '3' en lugar de 'ó', 'ú', 'í', 'é'; o '1' en lugar de 'á', 'ñ'). Ejemplos que encontrarás: "Funci3n p3blica" -> "Función pública", "Andaluc3a" -> "Andalucía", "tambi3n" -> "también", "car1cter" -> "carácter", "Se1ale" -> "Señale", "3rgano" -> "órgano", "opci3n" -> "opción", "tendr1n" -> "tendrán", "autom1tico" -> "automático". TU OBLIGACIÓN es corregir todos estos errores y devolver las preguntas y respuestas escritas en PERFECTO ESPAÑOL, con la ortografía correcta. NUNCA devuelvas palabras con números intercalados si se trata de un error ortográfico.
+
+      1. Si el contenido proporcionado (URL, HTML, texto o PDF) contiene un test, cuestionario o examen ya existente:
+         - TU TAREA ES EXTRAER TODAS esas preguntas exactamente como aparecen, PERO CORRIGIENDO LOS ERRORES DE CODIFICACIÓN MENCIONADOS EN EL PUNTO 0.
+         - Identifica la respuesta correcta. A menudo en el código HTML la respuesta correcta tiene una clase específica (como 'correct', 'right', 'verde', 'correcto'), un atributo de datos (como 'data-correct="true"'), o un script asociado. Si no puedes encontrar la marca técnica de la respuesta correcta, dedúcela usando tus conocimientos sobre el tema.
+         - Extrae TODAS las preguntas que encuentres en el contenido, sin importar el número. Ignora cualquier límite de cantidad. Es crucial que no te dejes ninguna pregunta del test original.
+      
+      2. Si el contenido es material de estudio (leyes, temarios, artículos) y NO contiene un test:
+         - Genera ${data.numQuestions} preguntas de opción múltiple nuevas basadas en el contenido.
+         - HAZ PREGUNTAS COMPLEJAS Y DIFÍCILES. Analiza el documento COMPLETO para buscar posibles datos confundibles, excepciones, plazos similares, o conceptos que se presten a confusión entre diferentes partes del texto.
+         - Formula preguntas que requieran relacionar conceptos de diferentes partes del documento, no solo copiar y pegar una frase.
+         - Las opciones incorrectas (distractores) deben ser muy plausibles y estar basadas en otros datos reales del documento para que el usuario tenga que pensar bien la respuesta.
+         - Asegúrate de que las preguntas sean claras y tengan una única respuesta correcta indiscutible.
+         
+         REGLA DE NO DUPLICIDAD:
+         - Revisa la lista de "PREGUNTAS YA EXISTENTES" proporcionada abajo.
+         - ESTÁ ESTRICTAMENTE PROHIBIDO generar preguntas que evalúen el mismo dato, artículo, plazo o concepto que ya esté cubierto por las preguntas existentes.
+         - Busca "huecos" en el temario: partes del texto que aún no han sido preguntadas.
+         - Si una pregunta existente ya pregunta por el plazo de un recurso, tú debes preguntar por otra cosa (quién lo resuelve, dónde se presenta, etc.), pero NO por el mismo plazo.
+         ${existingQuestionsContext}
+
+      Sección específica a evaluar/extraer: ${data.section || 'Todo el documento'}
+      Instrucciones adicionales: ${data.customPrompt || 'Ninguna'}
+      
+      URL proporcionada:
+      ${data.url || 'Ninguna'}
+
+      Contenido HTML de la URL (si aplica):
+      ${urlContent ? urlContent.substring(0, 500000) : 'Ninguno'}
+
+      Texto adicional proporcionado:
+      ${data.text || 'Ninguno'}
+    `;
+    
+    let contents: any = promptText;
+    if (data.fileData) {
+      contents = [
+        {
+          parts: [
+            { inlineData: { mimeType: data.fileData.mimeType, data: data.fileData.data } },
+            { text: promptText }
+          ]
+        }
+      ];
+    }
+    
+    const config: any = {
+      responseMimeType: "application/json",
+      systemInstruction: "Eres un experto en legislación española. Genera siempre el texto en español correcto, utilizando tildes (á, é, í, ó, ú) y la letra ñ correctamente. Corrige automáticamente cualquier error de codificación del texto original donde las tildes o la 'ñ' aparezcan como números (ej. 'Funci3n' -> 'Función', 'car1cter' -> 'carácter', 'tambi3n' -> 'también'). Asegúrate de que la codificación de caracteres sea UTF-8 y no utilices códigos numéricos para representar caracteres especiales.",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            text: { type: Type.STRING, description: "Texto de la pregunta" },
+            options: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Lista de 4 opciones de respuesta"
+            },
+            correctOptionIndex: { type: Type.INTEGER, description: "Índice (0-3) de la opción correcta" }
+          },
+          required: ["text", "options", "correctOptionIndex"]
+        }
+      }
+    };
+
+    // We no longer strictly need urlContext if we are passing the HTML directly, 
+    // but we can keep it as a fallback for the model.
+    if (data.url && !urlContent) {
+      config.tools = [{ urlContext: {} }];
+    }
+    
+    const modelToTry = 'gemini-3.1-pro-preview';
+    const fallbackModel = 'gemini-3-flash-preview';
+    
+    try {
+      const response = await ai.models.generateContent({
+        model: modelToTry,
+        contents: contents,
+        config: config
+      });
+      
+      const textResponse = response.text || '[]';
+      return parseAIResponse(textResponse);
+    } catch (error: any) {
+      console.warn(`Error with ${modelToTry}, trying fallback ${fallbackModel}:`, error);
+      
+      try {
+        const response = await ai.models.generateContent({
+          model: fallbackModel,
+          contents: contents,
+          config: config
+        });
+        const textResponse = response.text || '[]';
+        return parseAIResponse(textResponse);
+      } catch (fallbackError: any) {
+        console.error("Fallback AI Error:", fallbackError);
+        throw new Error(`Error de la IA: ${fallbackError.message || 'Desconocido'}. Si es un error de cuota (Quota exceeded), ten en cuenta que la clave de prueba compartida de la plataforma puede haber alcanzado su límite global. Inténtalo de nuevo más tarde.`);
+      }
+    }
+  },
+
+  async saveBulkQuestions(questions: any[], classification: string, topic: string, sourcePdf?: string): Promise<{ questions: Question[] }> {
+    const startDisplayId = await getNextDisplayId(questions.length);
+    const batch = writeBatch(db);
+    const savedQuestions: Question[] = [];
+
+    questions.forEach((q, index) => {
+      const docRef = doc(collection(db, 'questions'));
+      const questionData: any = {
+        text: q.text,
+        options: q.options,
+        correctOptionIndex: q.correctOptionIndex,
+        classification,
+        topic,
+        displayId: startDisplayId + index,
+        hits: 0,
+        misses: 0,
+        masteryLevel: 0,
+        nextReviewDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        reps: 0,
+        easeFactor: 2.5,
+        interval: 0
+      };
+      
+      if (sourcePdf) {
+        questionData.sourcePdf = sourcePdf;
+      }
+      
+      batch.set(docRef, questionData);
+      savedQuestions.push({ id: docRef.id, ...questionData } as Question);
+    });
+
+    await batch.commit();
+    return { questions: savedQuestions };
+  },
+
+  async reviewQuestion(userId: string, id: string, isCorrect: boolean, srsData: any): Promise<void> {
+    const progressId = `${userId}_${id}`;
+    const progressRef = doc(db, 'user_progress', progressId);
+    
+    const progressSnap = await getDoc(progressRef);
+    if (progressSnap.exists()) {
+      await updateDoc(progressRef, {
+        hits: isCorrect ? increment(1) : increment(0),
+        misses: !isCorrect ? increment(1) : increment(0),
+        nextReviewDate: srsData.nextReview,
+        lastSeen: new Date().toISOString(),
+        ...srsData
+      });
+    } else {
+      await setDoc(progressRef, {
+        userId,
+        questionId: id,
+        hits: isCorrect ? 1 : 0,
+        misses: !isCorrect ? 1 : 0,
+        masteryLevel: srsData.masteryLevel || 0,
+        nextReviewDate: srsData.nextReview,
+        reps: srsData.reps || 0,
+        easeFactor: srsData.easeFactor || 2.5,
+        interval: srsData.interval || 0,
+        lastSeen: new Date().toISOString()
+      });
+    }
+
+    // Add review history
+    await addDoc(collection(db, 'review_history'), {
+      userId,
+      questionId: id,
+      isCorrect,
+      reviewedAt: new Date().toISOString()
+    });
+  },
+
+  async updateSRS(userId: string, id: string, srsData: any): Promise<void> {
+    const progressId = `${userId}_${id}`;
+    const progressRef = doc(db, 'user_progress', progressId);
+    await updateDoc(progressRef, {
+      nextReviewDate: srsData.nextReview,
+      ...srsData
+    });
+  },
+
+  async updateQuestion(id: string, data: Partial<Question>): Promise<void> {
+    const questionRef = doc(db, 'questions', id);
+    await updateDoc(questionRef, data);
+  },
+
+  async moveQuestions(ids: string[], destination: { classification: string, topic?: string }): Promise<void> {
+    const batch = writeBatch(db);
+    ids.forEach(id => {
+      const questionRef = doc(db, 'questions', id);
+      batch.update(questionRef, destination);
+    });
+    await batch.commit();
+  },
+
+  async deleteQuestion(id: string): Promise<void> {
+    await deleteDoc(doc(db, 'questions', id));
+  },
+
+  async getQuestionHistory(userId: string, id: string): Promise<ReviewHistory[]> {
+    try {
+      const q = query(collection(db, 'review_history'), where('userId', '==', userId), where('questionId', '==', id));
+      const snapshot = await getDocs(q);
+      const history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReviewHistory));
+      return history.sort((a, b) => new Date(b.reviewedAt).getTime() - new Date(a.reviewedAt).getTime());
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'review_history');
+      return [];
+    }
+  },
+
+  async getMnemonic(question: string, correctAnswer: string): Promise<string> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey) return '';
+    const ai = new GoogleGenAI({ apiKey: apiKey as string });
+    
+    const prompt = `Crea una regla mnemotécnica o una historia corta, absurda y muy memorable para recordar este dato.
+      Pregunta: ${question}
+      Respuesta correcta: ${correctAnswer}
+      
+      IMPORTANTE: Si la respuesta contiene números (fechas, artículos, plazos, etc.), utiliza el SISTEMA NINJA de código fonético para crear la mnemotecnia:
+      0: R / RR
+      1: T, D
+      2: N, Ñ
+      3: M / W
+      4: C / K / Q
+      5: L / V / LL
+      6: S, Z
+      7: F / J
+      8: G / X / CH
+      9: P, B
+      (Las vocales, H e Y no tienen valor).
+      
+      Si usas el código fonético, explica brevemente la palabra elegida (ej: "Para el 10 usamos TORO (T=1, R=0)").
+      No des explicaciones adicionales innecesarias, solo la mnemotecnia o historia.`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-pro-preview',
+        contents: prompt,
+      });
+      return response.text || '';
+    } catch (error: any) {
+      console.warn("Mnemonic AI Error, trying fallback:", error);
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: prompt,
+        });
+        return response.text || '';
+      } catch (fallbackError: any) {
+        console.error("Fallback Mnemonic AI Error:", fallbackError);
+        return `Error al generar la regla mnemotécnica. Si es un error de cuota (Quota exceeded), la clave compartida de la plataforma puede haber alcanzado su límite. Inténtalo más tarde.`;
+      }
+    }
+  },
+
+  async saveMnemonic(questionId: string, mnemonic: string): Promise<void> {
+    await addDoc(collection(db, 'mnemonics'), {
+      questionId,
+      mnemonic,
+      createdAt: new Date().toISOString()
+    });
+
+    const questionRef = doc(db, 'questions', questionId);
+    const questionSnap = await getDoc(questionRef);
+    if (questionSnap.exists()) {
+      const data = questionSnap.data();
+      const mnemonics = data.mnemonics || [];
+      if (!mnemonics.includes(mnemonic)) {
+        await updateDoc(questionRef, {
+          mnemonics: [...mnemonics, mnemonic]
+        });
+      }
+    }
+  },
+
+  async getSavedPrompts(): Promise<SavedPrompt[]> {
+    try {
+      const snapshot = await getDocs(collection(db, 'saved_prompts'));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
+      return [];
+    }
+  },
+
+  async savePrompt(title: string, prompt: string): Promise<void> {
+    await addDoc(collection(db, 'saved_prompts'), { title, prompt });
+  },
+
+  async getTestSessions(userId: string): Promise<TestSession[]> {
+    try {
+      const q = query(collection(db, 'test_sessions'), where('userId', '==', userId), orderBy('completedAt', 'desc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TestSession));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'test_sessions');
+      return [];
+    }
+  },
+
+  async saveTestSession(userId: string, data: Omit<TestSession, 'id' | 'completedAt' | 'userId'>): Promise<void> {
+    await addDoc(collection(db, 'test_sessions'), {
+      ...data,
+      userId,
+      completedAt: new Date().toISOString()
+    });
+  },
+
+  async generatePhoneticWords(numberStr: string, letters: string): Promise<string[]> {
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (!apiKey) return [];
+      const ai = new GoogleGenAI({ apiKey: apiKey as string });
+      const prompt = `Actúa como un experto en mnemotecnia. Para el número "${numberStr}", las opciones de consonantes por cada dígito en orden son: ${letters}. 
+Genera todas las palabras posibles en español (o una lista exhaustiva de hasta 30 palabras) que cumplan con este código.
+REGLA ESTRICTA: La palabra debe contener EXACTAMENTE las consonantes correspondientes a los dígitos en el orden exacto. Las vocales (a,e,i,o,u) y las letras H e Y no tienen valor y se usan para rellenar.
+Ejemplo: Para "10" (1=T/D, 0=R/RR) -> "Toro", "Torre", "Ateo", "Duro".
+Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
+
+      const config: any = {
+        systemInstruction: "Eres un experto en mnemotecnia y lenguaje español. Genera siempre el texto en español correcto, utilizando tildes (á, é, í, ó, ú) y la letra ñ correctamente. Asegúrate de que la codificación de caracteres sea UTF-8.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.STRING
+          }
+        }
+      };
+
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-pro-preview",
+          contents: prompt,
+          config: config
+        });
+        const text = response.text || '[]';
+        const words = JSON.parse(text);
+        return Array.isArray(words) ? words : [];
+      } catch (error: any) {
+        console.warn("Phonetic AI Error, trying fallback:", error);
+        try {
+          const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: prompt,
+            config: config
+          });
+          const text = response.text || '[]';
+          const words = JSON.parse(text);
+          return Array.isArray(words) ? words : [];
+        } catch (e) {
+          return [];
+        }
+      }
+    } catch (error) {
+      console.error("Error generating phonetic words:", error);
+      return [];
+    }
+  },
+
+  async generateAIContent(prompt: string): Promise<string> {
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (!apiKey) throw new Error("API Key de Gemini no configurada");
+      const ai = new GoogleGenAI({ apiKey: apiKey as string });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          systemInstruction: "Eres un asistente experto en oposiciones y legislación. Genera siempre el texto en español correcto.",
+        }
+      });
+      return response.text || "";
+    } catch (error) {
+      console.error("Error generating AI content:", error);
+      throw error;
+    }
+  },
+
+  // Topic Resources (PDFs)
+  async getTopicResource(topic: string, classification: string): Promise<any | null> {
+    const q = query(
+      collection(db, 'topic_resources'), 
+      where('topic', '==', topic), 
+      where('classification', '==', classification)
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() };
+  },
+
+  async saveTopicResource(data: any): Promise<void> {
+    const existing = await this.getTopicResource(data.topic, data.classification);
+    if (existing) {
+      await updateDoc(doc(db, 'topic_resources', existing.id), {
+        ...data,
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      await addDoc(collection(db, 'topic_resources'), {
+        ...data,
+        createdAt: new Date().toISOString()
+      });
+    }
+  },
+
+  async deleteTopicResource(id: string): Promise<void> {
+    await deleteDoc(doc(db, 'topic_resources', id));
+  },
+
+  // User Management
+  async getAllUsers(): Promise<User[]> {
+    try {
+      const q = query(collection(db, 'users'), orderBy('email'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'users');
+      return [];
+    }
+  },
+
+  async updateUserRole(userId: string, role: 'admin' | 'student' | 'pending'): Promise<void> {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { role });
+  },
+
+  async updateUserPermissions(userId: string, permissions: string[]): Promise<void> {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { permissions });
+  },
+
+  subscribeToUsers(callback: (users: User[]) => void) {
+    const q = query(collection(db, 'users'), orderBy('email'));
+    return onSnapshot(q, (snapshot) => {
+      const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      callback(users);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'users');
+    });
+  }
+};
+
+function fixEncodingArtifacts(text: string): string {
+  if (!text) return text;
+  let fixed = text
+    .replace(/Ã¡/g, 'á')
+    .replace(/Ã©/g, 'é')
+    .replace(/Ã­/g, 'í')
+    .replace(/Ã³/g, 'ó')
+    .replace(/Ãº/g, 'ú')
+    .replace(/Ã±/g, 'ñ')
+    .replace(/Ã‘/g, 'Ñ')
+    .replace(/Ã /g, 'Á')
+    .replace(/Ã‰/g, 'É')
+    .replace(/Ã /g, 'Í')
+    .replace(/Ã“/g, 'Ó')
+    .replace(/Ãš/g, 'Ú')
+    .replace(/Â¿/g, '¿')
+    .replace(/Â¡/g, '¡');
+    
+  // Fix common PDF extraction artifacts for Spanish
+  // 'ó' often becomes '³'
+  fixed = fixed.replace(/([a-zA-Z])³([a-zA-Z])/g, '$1ó$2');
+  fixed = fixed.replace(/([a-zA-Z])³(?=[\s.,;:)\]}?!]|$)/g, '$1ó');
+  fixed = fixed.replace(/(^|[\s(>\[{])³([a-zA-Z])/g, '$1ó$2');
+  
+  // Revert common volume units that might have been mangled by the above rule
+  fixed = fixed.replace(/\b(m|cm|km|mm)ó(?=[\s.,;:)\]}?!]|$)/g, '$1³');
+  
+  // 'í' often becomes '¡' (only inside words to avoid replacing valid opening exclamation marks)
+  fixed = fixed.replace(/([a-zA-Z])¡([a-zA-Z])/g, '$1í$2');
+  
+  // 'ñ' often becomes '±'
+  fixed = fixed.replace(/([a-zA-Z])±([a-zA-Z])/g, '$1ñ$2');
+  
+  return fixed;
+}
+
+function cleanParsedData(data: any): any {
+  if (typeof data === 'string') {
+    return fixEncodingArtifacts(data);
+  }
+  if (Array.isArray(data)) {
+    return data.map(cleanParsedData);
+  }
+  if (data !== null && typeof data === 'object') {
+    const cleaned: any = {};
+    for (const key in data) {
+      cleaned[key] = cleanParsedData(data[key]);
+    }
+    return cleaned;
+  }
+  return data;
+}
+
+function parseAIResponse(textResponse: string) {
+  let parsed;
+  try {
+    parsed = JSON.parse(textResponse);
+  } catch (e) {
+    console.error("Failed to parse JSON:", textResponse);
+    const match = textResponse.match(/```json\n([\s\S]*?)\n```/);
+    if (match) {
+      parsed = JSON.parse(match[1]);
+    } else {
+      throw new Error("Invalid JSON response from AI");
+    }
+  }
+  return cleanParsedData(parsed);
+}
+

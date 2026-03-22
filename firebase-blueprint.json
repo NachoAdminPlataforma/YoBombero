@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "Question": {
+      "title": "Question",
+      "description": "A global question in the database",
+      "type": "object",
+      "properties": {
+        "displayId": { "type": "integer" },
+        "text": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctOptionIndex": { "type": "integer" },
+        "classification": { "type": "string" },
+        "topic": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "sourcePdf": { "type": "string" },
+        "mnemonics": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["text", "options", "correctOptionIndex", "classification", "topic"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the platform",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "student"] },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "permissions": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["email", "role"]
+    },
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "Individual progress for a question",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "questionId": { "type": "string" },
+        "hits": { "type": "integer" },
+        "misses": { "type": "integer" },
+        "masteryLevel": { "type": "integer" },
+        "nextReviewDate": { "type": "string", "format": "date-time" },
+        "reps": { "type": "integer" },
+        "easeFactor": { "type": "number" },
+        "interval": { "type": "integer" },
+        "lastSeen": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "questionId"]
+    },
+    "ReviewHistory": {
+      "title": "ReviewHistory",
+      "description": "History of a single question review",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "questionId": { "type": "string" },
+        "isCorrect": { "type": "boolean" },
+        "reviewedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "questionId", "isCorrect", "reviewedAt"]
+    },
+    "TestSession": {
+      "title": "TestSession",
+      "description": "A completed test session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "topics": { "type": "array", "items": { "type": "string" } },
+        "totalQuestions": { "type": "integer" },
+        "correctCount": { "type": "integer" },
+        "incorrectCount": { "type": "integer" },
+        "score": { "type": "number" }
+      },
+      "required": ["userId", "completedAt", "totalQuestions", "correctCount", "incorrectCount", "score"]
+    },
+    "TopicResource": {
+      "title": "TopicResource",
+      "description": "A resource (PDF) associated with a topic",
+      "type": "object",
+      "properties": {
+        "topic": { "type": "string" },
+        "classification": { "type": "string" },
+        "fileName": { "type": "string" },
+        "extractedText": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["topic", "classification", "fileName"]
+    }
+  },
+  "firestore": {
+    "/questions/{questionId}": {
+      "schema": "Question",
+      "description": "Global questions"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/user_progress/{progressId}": {
+      "schema": "UserProgress",
+      "description": "Individual user progress for questions"
+    },
+    "/review_history/{historyId}": {
+      "schema": "ReviewHistory",
+      "description": "History of reviews"
+    },
+    "/test_sessions/{sessionId}": {
+      "schema": "TestSession",
+      "description": "Test session history"
+    },
+    "/topic_resources/{resourceId}": {
+      "schema": "TopicResource",
+      "description": "Topic resources"
+    },
+    "/metadata/counters": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "questionDisplayId": { "type": "integer" }
+        }
+      },
+      "description": "Global counters"
+    }
+  }
+}

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Test Cap�tulo I Ley de Prevenci�n de Riesgos Laborales</title>
+<meta name="keywords" content="test, cap�tulo I, oposiciones, LPRL, ley prevenci�n riesgos laborales"/>
+
+
+            <!--Index y otras p�ginas de primer nivel no incluyen este head!!!-->
+            
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8_spanish_ci" />
+<link rel="stylesheet" type="text/css" href="../css/estilos.css" media="screen"/>
+<link rel="icon" type="image/png" href="http://testdeley.com/favicon.png" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-74954057-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.0/jquery.min.js"></script>
+
+            <!--c�digo para el test-->
+<script>
+$(document).ready(function(){ 
+    $("#listado li ul li div").mouseenter(function(){
+        if($(this).attr('class')=='normal' || $(this).attr('class')=='correcto'){
+            $(this).addClass('seleccionado');
+        }
+    });
+    $("#listado li ul li div").mouseleave(function(){
+        if($(this).attr('class')=='normal seleccionado'){
+            $(this).removeClass().addClass('normal');
+        }
+        if($(this).attr('class')=='correcto seleccionado'){
+            $(this).removeClass().addClass('correcto');
+        }
+    });
+    $("#listado li ul li div").click(function(){
+        if($(this).attr('class')=='correcto seleccionado'){            /*si acierta*/
+            $(this).removeClass().addClass('acertado_usuario');
+            $(this).siblings('.normal').removeClass().addClass('resto');
+        }
+        else if($(this).attr('class') == 'normal seleccionado') {       /*si no acierta*/
+            $(this).removeClass().addClass('fallado');
+            $(this).siblings('.normal').removeClass().addClass('resto');
+            $(this).siblings('.correcto').removeClass().addClass('acertado');
+            $(this).siblings('.articulo').show();               //  PARA MOSTRAR EL DIV CON EL ARTICULO SI FALLA!!!!
+        }
+        $(this).attr("disabled", true);
+        $(this).siblings().attr("disabled", true);
+        $(this).css('cursor', 'default');                         
+        $(this).siblings().css('cursor', 'default');              
+            
+        correctas = $('.acertado_usuario').size();
+        falladas = $('.fallado').size();
+        no_answer = $('.correcto').size();
+        $("#resultado_a").html("Correctas: "+correctas);
+        $("#resultado_b").html("Incorrectas: "+falladas);
+        $("#resultado_c").html("Sin respuesta: "+no_answer);
+    });
+});
+</script>
+
+            <!--c�digo para el test-->
+			
+			
+			<!--c�digo para la barra indicadora progreso scroll-->
+<script>
+// When the user scrolls the page, execute myFunction 
+window.onscroll = function() {myFunction()};
+
+function myFunction() {
+  var winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+  var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+  var scrolled = (winScroll / height) * 100;
+  document.getElementById("myBar").style.width = scrolled + "%";
+}
+</script>	
+			<!--c�digo para la barra indicadora progreso scroll-->
+			
+			
+
+
+                                        <!--adsense anuncios ancla moviles-->
+            
+<script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+<script>
+  (adsbygoogle = window.adsbygoogle || []).push({
+    google_ad_client: "ca-pub-4861525527997064",
+    enable_page_level_ads: true
+  });
+</script>
+
+
+
+                                        <!--adsense anuncios ancla moviles-->
+                                        
+  
+  
+                                          <!--adsense anuncios auromaticos-->
+  <script data-ad-client="ca-pub-4861525527997064" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+                                            <!--adsense anuncios auromaticos-->
+                                            
+  
+                 <!--c�digo para que salga el consentimiento de cookies (tamb�en est� en index.php-->
+
+<link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/cookieconsent2/3.0.3/cookieconsent.min.css" />
+<script src="//cdnjs.cloudflare.com/ajax/libs/cookieconsent2/3.0.3/cookieconsent.min.js"></script>
+<script>
+window.addEventListener("load", function(){
+window.cookieconsent.initialise({
+  "palette": {
+    "popup": {
+      "background": "#1d8a8a"
+    },
+    "button": {
+      "background": "#62ffaa"
+    }
+  },
+  "theme": "edgeless",
+  "content": {
+    "message": "Esta web usa cookies para mejorar la experiencia de navegaci�n. ",
+    "dismiss": "Entendido",
+    "link": "Ver m�s",
+    "href": "http://testdeley.com/cookies.php"
+  }
+})});
+</script>
+
+                 <!--c�digo para que salga el consentimiento de cookies (tamb�en est� en index.php--></head>
+
+<body>
+<div id="contenedor">
+    <div id="header">
+		<div id="logo"><a href="http://testdeley.com/index.php" title="inicio"><span class="t">T</span><span class="d">d</span><span class="o">L</span></a></div>
+		<div id="titulo">TestDeLey.com</div>
+	    <div class="progress-container">
+			<div class="progress-bar" id="myBar"></div>
+		</div>
+	</div>
+	
+	<div id="menu">
+		<ul>
+			<li><a href="http://testdeley.com/ley-39-15/sumario.php" title="Test Ley 39/15, de 1 de octubre, del Procedimiento Administrativo Com�n de las Administraciones P�blicas">Ley 39/15</a></li>
+			<li><a href="http://testdeley.com/ley-40-15/sumario.php" title="Test Ley 40/15, de 1 de octubre, de R�gimen Jur�dico del Sector P�blico">Ley 40/15</a></li>
+			<li><a href="http://testdeley.com/ley-9-17/sumario.php" title="Test Ley 9/2017, de 8 de noviembre, de Contratos del Sector P�blico">Ley 9/17</a></li>
+			<li class="menu_abajo_2"><a href="http://testdeley.com/ce/sumario.php" title="Test Constituci�n Espa�ola">Constituci�n</a></li>
+			<li><a href="http://testdeley.com/ley-50-97/sumario.php" title="Test Ley 50/1997, de 27 de noviembre, del Gobierno">Ley 50/97</a></li>
+			<li class="menu_abajo"><a href="http://testdeley.com/ebep/sumario.php" title="Test Real Decreto Legislativo 5/2015, Estatuto B�sico del Empleado P�blico">EBEP</a></li>	
+			<li><a href="http://testdeley.com/rdl-2-15/sumario.php" title="Test Ley Estatuto de los Trabajadores">RDL 2/15</a></li>
+			<li class="menu_abajo_2"><a href="http://testdeley.com/lprl/sumario.php" title="Test Ley 31/1995, de 8 de noviembre, de Prevenci�n de Riesgos Laborales">LPRL</a></li>
+			<li><a href="http://testdeley.com/lopd/sumario.php" title="Test Ley Org�nica 3/2018, de 5 de diciembre, de Protecci�n de Datos Personales y garant�a de los derechos digitales">LOPD</a></li>
+			<li><a href="http://testdeley.com/ley-55-03/sumario.php" title="Test Ley 55/2003, de 16 de diciembre, del Estatuto Marco del personal estatutario de los servicios de salud">Ley 55/03</a></li>
+			<li><a href="http://testdeley.com/lo-3-07/sumario.php" title="Test Ley Org�nica 3/2007, de 22 de marzo, para la igualdad efectiva de mujeres y hombres">LO 3/07</a></li>
+			<li><a href="http://testdeley.com/lo-1-04/sumario.php" title="Test Ley Org�nica 1/2004, de 28 de diciembre, de Medidas de Protecci�n Integral contra la Violencia de G�nero">LO 1/04</a></li>
+			<li><a href="http://testdeley.com/ley-19-13/sumario.php" title="Test Ley 19/2013, de 9 de diciembre, de transparencia, acceso a la informaci�n p�blica y buen gobierno">Ley 19/13</a></li>
+		</ul>
+	</div>
+	<div id="sub_menu"></div>
+
+	
+	
+	
+
+
+    
+    <!-- adaptable superior -->
+	<!-- <div id="bannerhorizontal">
+            <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>  
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-4861525527997064"
+                     data-ad-slot="4332958232"
+                     data-ad-format="auto"></ins>
+                <script>
+                (adsbygoogle = window.adsbygoogle || []).push({});
+            </script>
+    </div> -->
+    
+    <div id="centro">
+        <h1 class="nombreley2">Test Cap�tulo I Ley 31/1995, de 8 de noviembre, de Prevenci�n de Riesgos Laborales.</h1>
+        <ul id="listado">             
+            <li> 1.      La Ley de Prevenci�n de Riesgos Laborales establece los principios generales relativos a la prevenci�n de los riesgos profesionales para:
+                <ul>
+                    <li>
+                        <div class="normal">la protecci�n de la seguridad y de la salud</div>
+                        <div class="normal">la eliminaci�n o disminuci�n de los riesgos derivados del trabajo</div>
+                        <div class="normal">la informaci�n, la consulta, la participaci�n equilibrada y la formaci�n de los trabajadores en materia preventiva</div>
+                        <div class="correcto">todas son correctas</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 2.      Las disposiciones de car�cter laboral contenidas en esta Ley y en sus normas reglamentarias tendr�n en todo caso el car�cter de:
+                <ul>
+                    <li>
+                        <div class="normal">Derecho necesario m�ximo disponible</div>
+                        <div class="correcto">Derecho necesario m�nimo indisponible</div>
+                        <div class="normal">Derecho necesario m�ximo indisponible</div>
+                        <div class="normal">Derecho necesario m�nimo disponible</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 3.      La presente Ley no ser� de aplicaci�n en aquellas actividades cuyas particularidades lo impidan en el �mbito de las funciones p�blicas de (se�ala la incorrecta):
+                <ul>
+                    <li>
+                        <div class="normal">polic�a y seguridad</div>
+                        <div class="correcto">Servicios operativos de protecci�n civil y peritaje forense en cualquier caso</div>
+                        <div class="normal">Fuerzas Armadas y actividades militares de la Guardia Civil</div>
+                        <div class="normal">resguardo aduanero</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 4.      No es correcto:
+                <ul>
+                    <li>
+                        <div class="normal">esta Ley inspirar� la normativa espec�fica que se dicte para regular la protecci�n de la seguridad y la salud en el �mbito de las Fuerzas Armadas</div>
+                        <div class="normal">en los establecimientos penitenciarios ser� de aplicaci�n lo dispuesto en la presente Ley, con las particularidades previstas en su normativa espec�fica</div>
+                        <div class="correcto">esta Ley ser� de aplicaci�n en todo caso en el �mbito de las funciones p�blicas de servicios operativos de protecci�n civil</div>
+                        <div class="normal">esta Ley ser� aplicable a las sociedades cooperativas, constituidas de acuerdo con la legislaci�n que les sea de aplicaci�n, en las que existan socios cuya actividad consista en la prestaci�n de un trabajo personal, con las peculiaridades derivadas de su normativa espec�fica</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 5.      Se entiende por riesgo laboral grave e inminente:
+                <ul>
+                    <li>
+                        <div class="correcto">aquel que resulte probable racionalmente que se materialice en un futuro inmediato y pueda suponer un da�o grave para la salud de los trabajadores</div>
+                        <div class="normal">aquel que resulte cierto racionalmente que se materialice en un futuro inmediato y pueda suponer un da�o grave para la salud de los trabajadores</div>
+                        <div class="normal">aquel que resulte probable racionalmente que se materialice en un futuro mediato y pueda suponer un da�o grave para la salud de los trabajadores</div>
+                        <div class="normal">aquel que resulte probable racionalmente que se materialice en un futuro inmediato o pueda suponer un da�o grave la salud de los trabajadores</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 6.      Se considerar� riesgo grave e inminente cuando la exposici�n a agentes susceptibles de causar da�os graves a la salud:
+                <ul>
+                    <li>
+                        <div class="normal">sea probable racionalmente que se materialice en un futuro inmediato de la que puedan derivarse da�os graves para la salud, siempre que �stos se manifiesten de forma inmediata</div>
+                        <div class="normal">sea cierto racionalmente que se materialice en un futuro inmediato de la que puedan derivarse da�os graves para la salud, siempre que �stos se manifiesten de forma inmediata</div>
+                        <div class="normal">sea probable racionalmente que se materialice en un futuro inmediato de la que puedan derivarse da�os graves para la salud, siempre que �stos no se manifiesten de forma inmediata</div>
+                        <div class="correcto">sea probable racionalmente que se materialice en un futuro inmediato de la que puedan derivarse da�os graves para la salud, aun cuando �stos no se manifiesten de forma inmediata</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 7.      Se consideran como procesos, actividades, operaciones, equipos o productos potencialmente peligrosos aquellos que:
+                <ul>
+                    <li>
+                        <div class="normal">originen riesgos para la seguridad y la salud de los trabajadores que los desarrollan o utilizan, aunque existan medidas preventivas generales</div>
+                        <div class="correcto">originen riesgos para la seguridad y la salud de los trabajadores que los desarrollan o utilizan, en ausencia de medidas preventivas espec�ficas</div>
+                        <div class="normal">originen riesgos para la seguridad y la salud de los trabajadores que los desarrollan o utiliza, aunque existan medidas preventivas espec�ficas</div>
+                        <div class="normal">originen riesgos para la seguridad y la salud de los trabajadores que los desarrollan o utilizan, en ausencia de medidas preventivas generales o espec�ficas</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 8.      En relaci�n con las Instituciones de la Uni�n Europea, el Instituto Nacional de Seguridad e Higiene en el Trabajo actuar� como centro de referencia nacional, garantizando la coordinaci�n y transmisi�n de la informaci�n que deber� facilitar a escala nacional, en particular respecto a:
+                <ul>
+                    <li>
+                        <div class="correcto">la Agencia Europea para la Seguridad y la Salud en el Trabajo y su Red</div>
+                        <div class="normal">la Comisi�n Nacional de Seguridad y Salud en el Trabajo y su Red</div>
+                        <div class="normal">el Instituto Europeo de Seguridad y Salud en el Trabajo y su Red</div>
+                        <div class="normal">la Inspecci�n de Trabajo y Seguridad Social y su Red</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 9.      Se entiende como riesgo laboral:
+                <ul>
+                    <li>
+                        <div class="normal">cualquier m�quina, aparato, instrumento o instalaci�n utilizada en el trabajo y que provoque peligro para la vida del trabajador</div>
+                        <div class="normal">las enfermedades, patolog�as o lesiones sufridas con motivo u ocasi�n del trabajo</div>
+                        <div class="correcto">la posibilidad de que un trabajador sufra un determinado da�o derivado del trabajo</div>
+                        <div class="normal">cualquier equipo destinado a ser llevado o sujetado por el trabajador para que le proteja de uno o varios riesgos que puedan amenazar su seguridad o su salud en el trabajo, as� como cualquier complemento o accesorio destinado a tal fin</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 10.      Para calificar un riesgo desde el punto de vista de su gravedad, se valorar�n conjuntamente:
+                <ul>
+                    <li>
+                        <div class="normal">las caracter�sticas del centro de trabajo y las condiciones personales del trabajador</div>
+                        <div class="correcto">la probabilidad de que se produzca el da�o y la severidad del mismo</div>
+                        <div class="normal">la existencia de procesos, actividades, operaciones, equipos o productos �potencialmente peligrosos� y con las medidas preventivas adoptadas</div>
+                        <div class="normal">el tipo de riesgo y el n�mero de posibles afectados</div>
+                    </li>
+                </ul>
+            </li>
+            
+            <!-- adaptable centro -->
+			<!-- <div id="bannerhorizontal">
+                <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-4861525527997064"
+                     data-ad-slot="1297473034"
+                     data-ad-format="auto"></ins>
+                <script>
+                (adsbygoogle = window.adsbygoogle || []).push({});
+                </script> 
+            </div> -->
+            
+            <li> 11.      Se considerar�n como da�os derivados del trabajo:
+                <ul>
+                    <li>
+                        <div class="normal">los accidentes y enfermedades que pueda sufrir un trabajador</div>
+                        <div class="correcto">enfermedades, patolog�as o lesiones sufridas con motivo u ocasi�n del trabajo</div>
+                        <div class="normal">cualquier lesi�n que sufra el trabajador en su vida diaria</div>
+                        <div class="normal">enfermedades profesionales y riesgos no laborales</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 12.      Esta Ley y sus normas de desarrollo no ser�n de aplicaci�n:
+                <ul>
+                    <li>
+                        <div class="normal">en el �mbito de las relaciones laborales reguladas en el texto refundido de la Ley del Estatuto de los Trabajadores</div>
+                        <div class="normal">en el �mbito de las relaciones de car�cter administrativo del personal al servicio de las Administraciones P�blicas</div>
+                        <div class="correcto">a las actividades de las Fuerzas Armadas y actividades militares de la Guardia Civil</div>
+                        <div class="normal">en el �mbito de las relaciones de car�cter estatutario del personal al servicio de las Administraciones P�blicas</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 13.      A efectos de la presente Ley, es definido como el conjunto de actividades o medidas adoptadas o previstas en todas las fases de actividad de la empresa con el fin de evitar o disminuir los riesgos derivados del trabajo:
+                <ul>
+                    <li>
+                        <div class="normal">el equipo de protecci�n individual</div>
+                        <div class="normal">el equipo de trabajo</div>
+                        <div class="correcto">prevenci�n</div>
+                        <div class="normal">la condici�n de trabajo</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 14.      Las disposiciones de car�cter laboral contenidas en esta Ley y en sus normas reglamentarias tendr�n en todo caso el car�cter de Derecho necesario m�nimo indisponible:
+                <ul>
+                    <li>
+                        <div class="normal">pudiendo ser modificadas en los convenios colectivos</div>
+                        <div class="normal">no pudiendo ser reguladas en los convenios colectivos</div>
+                        <div class="normal">no pudiendo ser mejoradas o desarrolladas en los convenios colectivos</div>
+                        <div class="correcto">pudiendo ser mejoradas y desarrolladas en los convenios colectivos</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 15.      Esta Ley y sus normas de desarrollo ser�n de aplicaci�n a:
+                <ul>
+                    <li>
+                        <div class="normal">las relaciones laborales reguladas en el texto refundido de la Ley del Estatuto de los Trabajadores</div>
+                        <div class="normal">las relaciones de car�cter administrativo o estatutario del personal al servicio de las Administraciones P�blicas</div>
+                        <div class="normal">servicios operativos de protecci�n civil y peritaje forense en los casos de grave riesgo, cat�strofe y calamidad p�blica</div>
+                        <div class="correcto">a y b son correctas</div>
+                    </li>
+                </ul>
+            </li>
+            <li> 16.      Es definido como cualquier m�quina, aparato, instrumento o instalaci�n utilizada en el trabajo:
+                <ul>
+                    <li>
+                        <div class="normal">la condici�n de trabajo</div>
+                        <div class="normal">el equipo de protecci�n individual</div>
+                        <div class="correcto">el equipo de trabajo</div>
+                        <div class="normal">un agente susceptible de causar da�os</div>
+                    </li>
+                </ul>
+            </li>
+            
+        </ul>
+        <div id="resultado_a"></div>
+        <div id="resultado_b"></div>
+        <div id="resultado_c"></div>
+        
+        <!-- enlaces adaptables inferior -->
+		<!-- <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-4861525527997064"
+             data-ad-slot="6704121033"
+             data-ad-format="link"></ins>
+        <script>
+        (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+        <div id="separador9"></div> -->
+        
+        <div class="volver"><a href="http://testdeley.com/lprl/capitulo-2-a.php" title="Test Cap�tulo II Ley de Prevenci�n de Riesgos Laborales">ir a test Cap�tulo II Ley de Prevenci�n de Riesgos Laborales</a></div>
+        <div class="volver"><a href="http://testdeley.com/lprl/sumario.php" title="Test Ley de Prevenci�n de Riesgos Laborales">ir a todos los tests Ley de Prevenci�n de Riesgos Laborales</a></div>
+    </div>
+    <div id="columna">
+          
+
+        <ul>
+            <li class="seccion">LP Riesgos Laborales</li>
+            <li><a href="http://testdeley.com/lprl/capitulo-1-a.php" title="Test del Cap�tulo I de la Ley de Prevenci�n de Riesgos Laborales">Cap�tulo I</a></li>
+            <li><a href="http://testdeley.com/lprl/capitulo-2-a.php" title="Test del Cap�tulo II de la Ley de Prevenci�n de Riesgos Laborales">Cap�tulo II</a></li>
+            <li><a href="http://testdeley.com/lprl/capitulo-3.php" title="Test del Cap�tulo III de la Ley de Prevenci�n de Riesgos Laborales">Cap�tulo III</a></li>
+            <li><a href="http://testdeley.com/lprl/capitulo-4-a.php" title="Test del Cap�tulo IV de la Ley de Prevenci�n de Riesgos Laborales">Cap�tulo IV</a></li>
+            <li><a href="http://testdeley.com/lprl/capitulo-5.php" title="Test del Cap�tulo V de la Ley de Prevenci�n de Riesgos Laborales">Cap�tulo V</a></li>
+            <li><a href="http://testdeley.com/lprl/capitulo-6-7-a.php" title="Test del Cap�tulo VI y VII de la Ley de Prevenci�n de Riesgos Laborales">Cap�tulo VI y VII</a></li>
+        </ul>
+        <ul>
+            <li class="seccion">Ley 39/15</li>
+            <li><a href="http://testdeley.com/ley-39-15/titulo-preliminar-a.php" title="Test del T�tulo preliminar de la Ley 39/15">T�tulo Preliminar</a></li>
+            <li><a href="http://testdeley.com/ley-39-15/titulo-1.php" title="Test del T�tulo I de la Ley 39/15">T�tulo I</a></li>
+            <li><a href="http://testdeley.com/ley-39-15/titulo-2.php" title="Test del T�tulo II de la Ley 39/15">T�tulo II</a></li>
+            <li><a href="http://testdeley.com/ley-39-15/titulo-3.php" title="Test del T�tulo III de la Ley 39/15">T�tulo III</a></li>
+            <li><a href="http://testdeley.com/ley-39-15/titulo-4.php" title="Test del T�tulo IV de la Ley 39/15">T�tulo IV</a></li>
+            <li><a href="http://testdeley.com/ley-39-15/titulo-5.php" title="Test del T�tulo V de la Ley 39/15">T�tulo V</a></li>
+            <li><a href="http://testdeley.com/ley-39-15/titulo-6.php" title="Test del T�tulo VI de la Ley 39/15">T�tulo VI</a></li>
+        </ul>
+        <ul>
+            <li class="seccion">Constituci�n Espa�ola</li>
+			<li><a href="http://testdeley.com/ce/titulo-preliminar.php" title="Test del T�tulo preliminar de la Constituci�n Espa�ola">T�tulo Preliminar</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-1.php" title="Test del T�tulo I de la Constituci�n Espa�ola">T�tulo I</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-2.php" title="Test del T�tulo II de la Constituci�n Espa�ola">T�tulo II</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-3.php" title="Test del T�tulo III de la Constituci�n Espa�ola">T�tulo III</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-4.php" title="Test del T�tulo IV de la Constituci�n Espa�ola">T�tulo IV</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-5.php" title="Test del T�tulo V de la Constituci�n Espa�ola">T�tulo V</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-6.php" title="Test del T�tulo VI de la Constituci�n Espa�ola">T�tulo VI</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-7.php" title="Test del T�tulo VII de la Constituci�n Espa�ola">T�tulo VII</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-8.php" title="Test del T�tulo VIII de la Constituci�n Espa�ola">T�tulo VIII</a></li>
+            <li><a href="http://testdeley.com/ce/titulo-9-10.php" title="Test del T�tulo IX y X de la Constituci�n Espa�ola">T�tulo IX y X</a></li>
+        </ul>
+        
+		<!-- adaptable columna -->
+		<!-- <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+            
+            <ins class="adsbygoogle"
+                 style="display:block"
+                 data-ad-client="ca-pub-4861525527997064"
+                 data-ad-slot="4553284230"
+                 data-ad-format="auto"></ins>
+            <script>
+            (adsbygoogle = window.adsbygoogle || []).push({});
+        </script> -->
+    </div>
+</div>
+<div id="foot">
+    
+<ul>
+    <li><a href="http://testdeley.com">inicio</a></li>
+    <li><a href="http://testdeley.com/contacto.php">contacto</a></li>
+    <li><a href="http://testdeley.com/aviso_legal.php">aviso legal</a></li></br>
+</ul>
+
+
+</div>
+</body>
+</html>

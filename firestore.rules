@@ -1,0 +1,251 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - email: string (required, email format)
+    //   - role: string (required, enum: ['admin', 'student'])
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional, url format)
+    //   - permissions: list (optional, list of allowed topics)
+    //
+    // Collection: questions
+    // Document ID: questionId (random)
+    // Fields:
+    //   - displayId: number (required)
+    //   - text: string (required)
+    //   - options: list (required, 4 strings)
+    //   - correctOptionIndex: number (required, 0-3)
+    //   - classification: string (required)
+    //   - topic: string (required)
+    //   - createdAt: timestamp (required)
+    //   - sourcePdf: string (optional)
+    //   - mnemonics: list (optional)
+    //
+    // Collection: user_progress
+    // Document ID: progressId (userId_questionId)
+    // Fields:
+    //   - userId: string (required)
+    //   - questionId: string (required)
+    //   - hits: number (required)
+    //   - misses: number (required)
+    //   - masteryLevel: number (required)
+    //   - nextReviewDate: timestamp (required)
+    //   - reps: number (required)
+    //   - easeFactor: number (required)
+    //   - interval: number (required)
+    //   - lastSeen: timestamp (required)
+    //
+    // Collection: review_history
+    // Document ID: historyId (random)
+    // Fields:
+    //   - userId: string (required)
+    //   - questionId: string (required)
+    //   - isCorrect: bool (required)
+    //   - reviewedAt: timestamp (required)
+    //
+    // Collection: test_sessions
+    // Document ID: sessionId (random)
+    // Fields:
+    //   - userId: string (required)
+    //   - completedAt: timestamp (required)
+    //   - topics: list (required)
+    //   - totalQuestions: number (required)
+    //   - correctCount: number (required)
+    //   - incorrectCount: number (required)
+    //   - score: number (required)
+    //
+    // Collection: topic_resources
+    // Document ID: resourceId (random)
+    // Fields:
+    //   - topic: string (required)
+    //   - classification: string (required)
+    //   - fileName: string (required)
+    //   - extractedText: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: metadata/counters
+    // Fields:
+    //   - questionDisplayId: number (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAuthorized() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'student'];
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email == "nachotestprueba@gmail.com"));
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+    
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['email', 'role']) &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'student', 'pending'] &&
+             (!('permissions' in data) || data.permissions is list);
+    }
+
+    function isValidQuestion(data) {
+      return hasRequiredFields(['text', 'options', 'correctOptionIndex', 'classification', 'topic']) &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 10000 &&
+             data.options is list && data.options.size() >= 2 && data.options.size() <= 10 &&
+             data.correctOptionIndex is int && data.correctOptionIndex >= 0 &&
+             data.classification is string && data.topic is string &&
+             (!('displayId' in data) || data.displayId is int) &&
+             (!('hits' in data) || data.hits is int) &&
+             (!('misses' in data) || data.misses is int) &&
+             (!('masteryLevel' in data) || data.masteryLevel is int) &&
+             (!('nextReviewDate' in data) || isValidDateString(data.nextReviewDate)) &&
+             (!('createdAt' in data) || isValidDateString(data.createdAt)) &&
+             (!('reps' in data) || data.reps is int) &&
+             (!('easeFactor' in data) || data.easeFactor is number) &&
+             (!('interval' in data) || data.interval is int) &&
+             (!('flaggedForTeacher' in data) || data.flaggedForTeacher is bool) &&
+             (!('flaggedForCorrection' in data) || data.flaggedForCorrection is bool) &&
+             (!('teacherComment' in data) || data.teacherComment is string) &&
+             (!('correctionComment' in data) || data.correctionComment is string) &&
+             (!('mnemonics' in data) || data.mnemonics is list) &&
+             (!('sourcePdf' in data) || data.sourcePdf is string);
+    }
+
+    function isValidUserProgress(data) {
+      return hasRequiredFields(['userId', 'questionId', 'hits', 'misses', 'masteryLevel', 'nextReviewDate', 'reps', 'easeFactor', 'interval', 'lastSeen']) &&
+             data.userId == request.auth.uid &&
+             data.hits is int && data.misses is int &&
+             data.masteryLevel is int &&
+             isValidDateString(data.nextReviewDate) &&
+             isValidDateString(data.lastSeen);
+    }
+
+    function isValidReviewHistory(data) {
+      return hasRequiredFields(['userId', 'questionId', 'isCorrect', 'reviewedAt']) &&
+             data.userId == request.auth.uid &&
+             data.questionId is string &&
+             data.isCorrect is bool &&
+             isValidDateString(data.reviewedAt);
+    }
+
+    function isValidTestSession(data) {
+      return hasRequiredFields(['userId', 'completedAt', 'topics', 'totalQuestions', 'correctCount', 'incorrectCount', 'score']) &&
+             data.userId == request.auth.uid &&
+             isValidDateString(data.completedAt) &&
+             data.topics is list &&
+             data.totalQuestions is int &&
+             data.correctCount is int &&
+             data.incorrectCount is int &&
+             data.score is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                      (isOwner(userId) || isAdmin()) &&
+                      (request.resource.data.role == 'pending' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) &&
+                      (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
+    }
+
+    match /questions/{questionId} {
+      // Students can only read questions if they have permission for the topic
+      // For simplicity in this prototype, we allow all authorized users to read
+      // But we can harden it later if needed.
+      allow read: if isAuthorized();
+      allow write: if isAdmin() && isValidQuestion(request.resource.data);
+    }
+
+    match /user_progress/{progressId} {
+      allow read: if isAuthorized() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthorized() && isValidUserProgress(request.resource.data);
+      allow update: if isAuthorized() && isValidUserProgress(request.resource.data) && 
+                      (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthorized() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /review_history/{historyId} {
+      allow read: if isAuthorized() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthorized() && isValidReviewHistory(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /test_sessions/{sessionId} {
+      allow read: if isAuthorized() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthorized() && isValidTestSession(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /topic_resources/{resourceId} {
+      allow read: if isAuthorized();
+      allow write: if isAdmin();
+    }
+
+    match /metadata/counters {
+      allow read: if isAuthorized();
+      allow write: if isAdmin();
+    }
+
+    match /mnemonics/{mnemonicId} {
+      allow read: if isAuthorized();
+      allow write: if isAdmin();
+    }
+
+    match /saved_prompts/{promptId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
