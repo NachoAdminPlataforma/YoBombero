@@ -400,14 +400,11 @@ export const api = {
     let urlContent = '';
     if (data.url) {
       try {
-        const response = await fetch('/api/fetch-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: data.url })
-        });
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(data.url)}`;
+        const response = await fetch(proxyUrl);
         if (response.ok) {
           const result = await response.json();
-          urlContent = result.html;
+          urlContent = result.contents;
         } else {
           console.warn('Failed to fetch URL content via proxy');
         }
