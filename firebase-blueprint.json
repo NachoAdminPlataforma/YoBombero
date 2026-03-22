@@ -11,6 +11,7 @@
         "correctOptionIndex": { "type": "integer" },
         "classification": { "type": "string" },
         "topic": { "type": "string" },
+        "userId": { "type": "string", "description": "The user who created this question (optional, null for global questions)" },
         "createdAt": { "type": "string", "format": "date-time" },
         "sourcePdf": { "type": "string" },
         "mnemonics": { "type": "array", "items": { "type": "string" } }

@@ -7,11 +7,12 @@ import { motion, AnimatePresence } from 'motion/react';
 interface GlobalSearchProps {
   isOpen: boolean;
   onClose: () => void;
+  userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
 }
 
-export function GlobalSearch({ isOpen, onClose, userRole, permissions }: GlobalSearchProps) {
+export function GlobalSearch({ isOpen, onClose, userId, userRole, permissions }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{
     questions: Question[];
@@ -56,7 +57,7 @@ export function GlobalSearch({ isOpen, onClose, userRole, permissions }: GlobalS
         // In a real app, we'd have a backend search. 
         // Here we'll fetch all and filter client-side for the demo.
         const [allQuestions, allResources] = await Promise.all([
-          new Promise<Question[]>((resolve) => api.subscribeToQuestions(userRole, permissions, resolve)),
+          new Promise<Question[]>((resolve) => api.subscribeToQuestions(userId, userRole, permissions, resolve)),
           // We don't have a subscribeToAllResources, so we'll just search questions for now 
           // and maybe add resource search if we implement a list method in api.ts
           Promise.resolve([]) 

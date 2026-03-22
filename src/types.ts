@@ -9,6 +9,7 @@ export interface User {
 
 export interface Question {
   id: string;
+  userId?: string;
   displayId: number;
   text: string;
   options: string[];

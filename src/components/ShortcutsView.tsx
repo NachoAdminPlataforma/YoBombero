@@ -5,11 +5,12 @@ import { LegislationAnalyzer } from './LegislationAnalyzer';
 import { Brain, Image as ImageIcon, FileText } from 'lucide-react';
 
 interface ShortcutsViewProps {
+  userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
 }
 
-export function ShortcutsView({ userRole, permissions }: ShortcutsViewProps) {
+export function ShortcutsView({ userId, userRole, permissions }: ShortcutsViewProps) {
   const [activeTab, setActiveTab] = useState<'phonetic' | 'images' | 'legislation'>('phonetic');
 
   const tabs = [
@@ -50,7 +51,7 @@ export function ShortcutsView({ userRole, permissions }: ShortcutsViewProps) {
           <ImageGenerator />
         </div>
         <div className={activeTab === 'legislation' ? 'animate-in fade-in slide-in-from-bottom-2 duration-300' : 'hidden'}>
-          <LegislationAnalyzer userRole={userRole} permissions={permissions} />
+          <LegislationAnalyzer userId={userId} userRole={userRole} permissions={permissions} />
         </div>
       </div>
     </div>

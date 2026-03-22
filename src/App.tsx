@@ -399,34 +399,40 @@ export default function App() {
         </div>
         <div className={currentView === 'shortcuts' ? 'block' : 'hidden'}>
           <ShortcutsView 
+            userId={user.uid}
             userRole={appUser?.role || 'student'} 
             permissions={appUser?.permissions || []} 
           />
         </div>
         <div className={currentView === 'create' ? 'block' : 'hidden'}>
           <QuestionCreator 
+            userId={user.uid}
             userRole={appUser?.role || 'student'} 
             permissions={appUser?.permissions || []} 
           />
         </div>
         <div className={currentView === 'database' ? 'block' : 'hidden'}>
-          {appUser?.role === 'admin' ? (
-            <QuestionDatabase 
-              userId={user.uid} 
-              userRole={appUser?.role || 'student'} 
-              permissions={appUser?.permissions || []} 
-            />
-          ) : (
-            <div className="text-center py-20">No tienes permiso para acceder a esta sección.</div>
-          )}
+          <QuestionDatabase 
+            userId={user.uid} 
+            userRole={appUser?.role || 'student'} 
+            permissions={appUser?.permissions || []} 
+          />
         </div>
         <div className={currentView === 'history' ? 'block' : 'hidden'}>
           <TestHistory userId={user.uid} />
         </div>
         <div className={currentView === 'admin' ? 'block' : 'hidden'}>
-          {appUser?.role === 'admin' ? <AdminPanel /> : <div className="text-center py-20">No tienes permiso para acceder a esta sección.</div>}
+          {appUser?.role === 'admin' ? <AdminPanel userId={user.uid} /> : <div className="text-center py-20">No tienes permiso para acceder a esta sección.</div>}
         </div>
-        {currentView === 'test' && <TestRunner questions={testQuestions} onComplete={handleTestComplete} userId={user.uid} />}
+        {currentView === 'test' && (
+          <TestRunner 
+            questions={testQuestions} 
+            onComplete={handleTestComplete} 
+            userId={user.uid} 
+            userRole={appUser?.role || 'student'}
+            permissions={appUser?.permissions || []}
+          />
+        )}
       </main>
 
       {/* Floating AI Tutor Button */}
@@ -444,6 +450,7 @@ export default function App() {
       <GlobalSearch 
         isOpen={isSearchOpen} 
         onClose={() => setIsSearchOpen(false)} 
+        userId={user.uid}
         userRole={appUser?.role || 'student'} 
         permissions={appUser?.permissions || []} 
       />

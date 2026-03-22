@@ -9,9 +9,11 @@ interface TestRunnerProps {
   questions: Question[];
   onComplete: () => void;
   userId: string;
+  userRole: 'admin' | 'student';
+  permissions: string[];
 }
 
-export function TestRunner({ questions, onComplete, userId }: TestRunnerProps) {
+export function TestRunner({ questions, onComplete, userId, userRole, permissions }: TestRunnerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -530,6 +532,8 @@ export function TestRunner({ questions, onComplete, userId }: TestRunnerProps) {
           <QuestionDetailsModal
             question={selectedQuestionToEdit}
             userId={userId}
+            userRole={userRole}
+            permissions={permissions}
             onClose={() => setSelectedQuestionToEdit(null)}
             onUpdate={(updatedQuestion) => {
               // Update the question in the answers array so the UI reflects changes

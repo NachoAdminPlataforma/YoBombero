@@ -6,11 +6,12 @@ import { FileText, Upload, Loader2, File as FileIcon, X, Folder } from 'lucide-r
 import Markdown from 'react-markdown';
 
 interface LegislationAnalyzerProps {
+  userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
 }
 
-export function LegislationAnalyzer({ userRole, permissions }: LegislationAnalyzerProps) {
+export function LegislationAnalyzer({ userId, userRole, permissions }: LegislationAnalyzerProps) {
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [fileContext, setFileContext] = useState('');
@@ -26,9 +27,9 @@ export function LegislationAnalyzer({ userRole, permissions }: LegislationAnalyz
   const [useAttachedPdf, setUseAttachedPdf] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = api.subscribeToTopics(userRole, permissions, setTopics);
+    const unsubscribe = api.subscribeToTopics(userId, userRole, permissions, setTopics);
     return () => unsubscribe();
-  }, [userRole, permissions]);
+  }, [userId, userRole, permissions]);
 
   useEffect(() => {
     if (selectedTopic) {

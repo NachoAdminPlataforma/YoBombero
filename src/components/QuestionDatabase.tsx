@@ -341,12 +341,12 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
 
   useEffect(() => {
     setLoading(true);
-    const unsubscribe = api.subscribeToQuestions(userRole, permissions, (data) => {
+    const unsubscribe = api.subscribeToQuestions(userId, userRole, permissions, (data) => {
       setQuestions(data);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [userRole, permissions]);
+  }, [userId, userRole, permissions]);
 
   useEffect(() => {
     setSelectedQuestionIds(new Set());
@@ -527,10 +527,12 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
   const handleSaveTopicEdit = async () => {
     if (editingTopic) {
       await api.updateTopic(
+        userId,
         editingTopic.oldTopic, 
         editingTopic.oldClassification, 
         editingTopic.newTopic, 
-        editingTopic.newClassification
+        editingTopic.newClassification,
+        userRole
       );
       setEditingTopic(null);
       // If we moved the topic out of the current classification, go back to root
@@ -1152,6 +1154,8 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
         <QuestionDetailsModal
           question={selectedQuestion}
           userId={userId}
+          userRole={userRole}
+          permissions={permissions}
           onClose={() => setSelectedQuestion(null)}
           onUpdate={(updatedQuestion) => {
             setSelectedQuestion(updatedQuestion);

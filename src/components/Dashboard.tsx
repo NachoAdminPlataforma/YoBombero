@@ -24,11 +24,11 @@ export function Dashboard({ onStartTest, userId, userRole, permissions }: Dashbo
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
 
   useEffect(() => {
-    const unsubscribe = api.subscribeToTopics(userRole, permissions, (t) => {
+    const unsubscribe = api.subscribeToTopics(userId, userRole, permissions, (t) => {
       setTopicsData(t);
     });
     
-    const unsubQuestions = api.subscribeToQuestions(userRole, permissions, (questions) => {
+    const unsubQuestions = api.subscribeToQuestions(userId, userRole, permissions, (questions) => {
       const now = new Date().toISOString();
       
       api.getUserProgress(userId).then(progress => {

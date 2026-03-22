@@ -17,6 +17,7 @@ service cloud.firestore {
     // Collection: questions
     // Document ID: questionId (random)
     // Fields:
+    //   - userId: string (optional, required for student-created questions)
     //   - displayId: number (required)
     //   - text: string (required)
     //   - options: list (required, 4 strings)
@@ -138,6 +139,7 @@ service cloud.firestore {
              data.options is list && data.options.size() >= 2 && data.options.size() <= 10 &&
              data.correctOptionIndex is int && data.correctOptionIndex >= 0 &&
              data.classification is string && data.topic is string &&
+             (!('userId' in data) || data.userId is string) &&
              (!('displayId' in data) || data.displayId is int) &&
              (!('hits' in data) || data.hits is int) &&
              (!('misses' in data) || data.misses is int) &&
@@ -197,11 +199,27 @@ service cloud.firestore {
     }
 
     match /questions/{questionId} {
-      // Students can only read questions if they have permission for the topic
-      // For simplicity in this prototype, we allow all authorized users to read
-      // But we can harden it later if needed.
-      allow read: if isAuthorized();
-      allow write: if isAdmin() && isValidQuestion(request.resource.data);
+      // Students can only read questions if they are their own or if they are admin-created and they have permission
+      allow read: if isAuthorized() && (
+        isAdmin() || 
+        (resource.data.userId == request.auth.uid) ||
+        (!('userId' in resource.data))
+      );
+      
+      // Students can create their own questions
+      allow create: if isAuthorized() && isValidQuestion(request.resource.data) && (
+        isAdmin() || 
+        (request.resource.data.userId == request.auth.uid)
+      );
+      
+      // Students can update their own questions
+      allow update: if isAuthorized() && isValidQuestion(request.resource.data) && (
+        isAdmin() || 
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid)
+      );
+      
+      // Only admin or owner can delete
+      allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
     }
 
     match /user_progress/{progressId} {

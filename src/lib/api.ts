@@ -75,12 +75,12 @@ async function getNextDisplayId(count: number = 1): Promise<number> {
 }
 
 export const api = {
-  subscribeToQuestions(userRole: 'admin' | 'student', permissions: string[], callback: (questions: Question[]) => void): () => void {
+  subscribeToQuestions(userId: string, userRole: 'admin' | 'student', permissions: string[], callback: (questions: Question[]) => void): () => void {
     const q = query(collection(db, 'questions'));
     return onSnapshot(q, (snapshot) => {
       const questions = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as Question))
-        .filter(q => userRole === 'admin' || permissions.includes(q.topic));
+        .filter(q => userRole === 'admin' || q.userId === userId || permissions.includes(q.topic));
       callback(questions);
     });
   },
@@ -93,14 +93,14 @@ export const api = {
     });
   },
 
-  subscribeToTopics(userRole: 'admin' | 'student', permissions: string[], callback: (topics: {topic: string, classification: string}[]) => void): () => void {
+  subscribeToTopics(userId: string, userRole: 'admin' | 'student', permissions: string[], callback: (topics: {topic: string, classification: string}[]) => void): () => void {
     const q = query(collection(db, 'questions'));
     return onSnapshot(q, (snapshot) => {
       const topicsMap = new Map<string, string>();
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         if (data.topic && data.classification) {
-          if (userRole === 'admin' || permissions.includes(data.topic)) {
+          if (userRole === 'admin' || data.userId === userId || permissions.includes(data.topic)) {
             topicsMap.set(`${data.classification}::${data.topic}`, data.classification);
           }
         }
@@ -118,10 +118,12 @@ export const api = {
     });
   },
 
-  async getAllQuestions(): Promise<Question[]> {
+  async getAllQuestions(userId: string, userRole: 'admin' | 'student' = 'admin'): Promise<Question[]> {
     try {
       const snapshot = await getDocs(collection(db, 'questions'));
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+      return snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Question))
+        .filter(q => userRole === 'admin' || q.userId === userId);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'questions');
       return [];
@@ -129,11 +131,11 @@ export const api = {
   },
 
   async getUrgentQuestions(userId: string, userRole: 'admin' | 'student' = 'admin', permissions: string[] = []): Promise<Question[]> {
-    const questions = await this.getAllQuestions();
+    const questions = await this.getAllQuestions(userId, userRole);
     const progress = await this.getUserProgress(userId);
     
     const questionsWithProgress = questions
-      .filter(q => userRole === 'admin' || permissions.includes(q.topic))
+      .filter(q => userRole === 'admin' || q.userId === userId || permissions.includes(q.topic))
       .map(q => ({
         ...q,
         ...(progress[q.id] || { hits: 0, misses: 0, reps: 0, easeFactor: 2.5, interval: 0, nextReviewDate: new Date().toISOString() })
@@ -184,11 +186,11 @@ export const api = {
     }
   },
 
-  async getTopics(userRole: 'admin' | 'student' = 'admin', permissions: string[] = []): Promise<{topic: string, classification: string}[]> {
-    const questions = await this.getAllQuestions();
+  async getTopics(userId: string, userRole: 'admin' | 'student' = 'admin', permissions: string[] = []): Promise<{topic: string, classification: string}[]> {
+    const questions = await this.getAllQuestions(userId, userRole);
     const topicsMap = new Map<string, string>();
     questions.forEach(q => {
-      if (userRole === 'admin' || permissions.includes(q.topic)) {
+      if (userRole === 'admin' || q.userId === userId || permissions.includes(q.topic)) {
         topicsMap.set(`${q.classification}::${q.topic}`, q.classification);
       }
     });
@@ -203,18 +205,20 @@ export const api = {
     });
   },
 
-  async getQuestionsByTopic(topic: string, classification: string): Promise<Question[]> {
+  async getQuestionsByTopic(userId: string, topic: string, classification: string, userRole: 'admin' | 'student' = 'admin'): Promise<Question[]> {
     try {
       const q = query(collection(db, 'questions'), where('topic', '==', topic), where('classification', '==', classification));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+      return snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Question))
+        .filter(q => userRole === 'admin' || q.userId === userId);
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'questions');
       return [];
     }
   },
 
-  async updateTopic(oldTopic: string, oldClassification: string, newTopicName: string, newClassification: string): Promise<void> {
+  async updateTopic(userId: string, oldTopic: string, oldClassification: string, newTopicName: string, newClassification: string, userRole: 'admin' | 'student' = 'admin'): Promise<void> {
     const q = query(collection(db, 'questions'), 
       where('topic', '==', oldTopic), 
       where('classification', '==', oldClassification)
@@ -223,10 +227,13 @@ export const api = {
     
     const batch = writeBatch(db);
     snapshot.docs.forEach(document => {
-      batch.update(document.ref, { 
-        topic: newTopicName, 
-        classification: newClassification 
-      });
+      const data = document.data();
+      if (userRole === 'admin' || data.userId === userId) {
+        batch.update(document.ref, { 
+          topic: newTopicName, 
+          classification: newClassification 
+        });
+      }
     });
     await batch.commit();
   },
@@ -239,11 +246,11 @@ export const api = {
     mode: 'srs' | 'balanced',
     totalNum: number
   ): Promise<Question[]> {
-    const allQuestions = await this.getAllQuestions();
+    const allQuestions = await this.getAllQuestions(userId, userRole);
     const progress = await this.getUserProgress(userId);
 
     const questionsWithProgress = allQuestions
-      .filter(q => userRole === 'admin' || permissions.includes(q.topic))
+      .filter(q => userRole === 'admin' || q.userId === userId || permissions.includes(q.topic))
       .map(q => ({
         ...q,
         ...(progress[q.id] || { hits: 0, misses: 0, reps: 0, easeFactor: 2.5, interval: 0, nextReviewDate: new Date().toISOString() })
@@ -333,10 +340,11 @@ export const api = {
     return selectedQuestions.sort(() => 0.5 - Math.random());
   },
 
-  async createManualQuestion(data: Partial<Question>): Promise<{ success: boolean, id: string }> {
+  async createManualQuestion(userId: string, data: Partial<Question>): Promise<{ success: boolean, id: string }> {
     const displayId = await getNextDisplayId(1);
     const docRef = await addDoc(collection(db, 'questions'), {
       ...data,
+      userId,
       displayId,
       hits: 0,
       misses: 0,
@@ -350,7 +358,7 @@ export const api = {
     return { success: true, id: docRef.id };
   },
 
-  async importQuestions(questions: any[]): Promise<{ success: boolean, count: number }> {
+  async importQuestions(userId: string, questions: any[]): Promise<{ success: boolean, count: number }> {
     try {
       const questionsCol = collection(db, 'questions');
       const startId = await getNextDisplayId(questions.length);
@@ -371,6 +379,7 @@ export const api = {
             correctOptionIndex: qData.correctOptionIndex,
             classification: qData.classification,
             topic: qData.topic,
+            userId,
             displayId: currentId++,
             hits: 0,
             misses: 0,
@@ -524,7 +533,7 @@ export const api = {
     }
   },
 
-  async saveBulkQuestions(questions: any[], classification: string, topic: string, sourcePdf?: string): Promise<{ questions: Question[] }> {
+  async saveBulkQuestions(userId: string, questions: any[], classification: string, topic: string, sourcePdf?: string): Promise<{ questions: Question[] }> {
     const startDisplayId = await getNextDisplayId(questions.length);
     const batch = writeBatch(db);
     const savedQuestions: Question[] = [];
@@ -537,6 +546,7 @@ export const api = {
         correctOptionIndex: q.correctOptionIndex,
         classification,
         topic,
+        userId,
         displayId: startDisplayId + index,
         hits: 0,
         misses: 0,

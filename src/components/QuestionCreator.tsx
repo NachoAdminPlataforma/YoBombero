@@ -5,20 +5,21 @@ import { SavedPrompt } from '../types';
 import { Sparkles, Save, FileText, PenTool, Upload, X, File as FileIcon } from 'lucide-react';
 
 interface QuestionCreatorProps {
+  userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
 }
 
-export function QuestionCreator({ userRole, permissions }: QuestionCreatorProps) {
+export function QuestionCreator({ userId, userRole, permissions }: QuestionCreatorProps) {
   const [activeTab, setActiveTab] = useState<'ai' | 'manual'>('ai');
   const [topics, setTopics] = useState<{topic: string, classification: string}[]>([]);
 
   useEffect(() => {
-    const unsubscribe = api.subscribeToTopics(userRole, permissions, (t) => {
+    const unsubscribe = api.subscribeToTopics(userId, userRole, permissions, (t) => {
       setTopics(t);
     });
     return () => unsubscribe();
-  }, [userRole, permissions]);
+  }, [userId, userRole, permissions]);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -48,13 +49,13 @@ export function QuestionCreator({ userRole, permissions }: QuestionCreatorProps)
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-        {activeTab === 'ai' ? <AIGenerator existingTopics={topics} /> : <ManualCreator existingTopics={topics} />}
+        {activeTab === 'ai' ? <AIGenerator userId={userId} userRole={userRole} existingTopics={topics} /> : <ManualCreator userId={userId} userRole={userRole} existingTopics={topics} />}
       </div>
     </div>
   );
 }
 
-function AIGenerator({ existingTopics }: { existingTopics: {topic: string, classification: string}[] }) {
+function AIGenerator({ userId, userRole, existingTopics }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, classification: string}[] }) {
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -147,7 +148,7 @@ function AIGenerator({ existingTopics }: { existingTopics: {topic: string, class
         fileData = { data: base64, mimeType: pdfFile.type };
       }
 
-      const existingQuestions = await api.getQuestionsByTopic(topic, classification);
+      const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
 
       const questions = await api.generateAIQuestions({
         text: extraText, url, numQuestions: finalNumQuestions, section, customPrompt, classification, topic, fileData, existingQuestions: existingQuestions
@@ -171,7 +172,7 @@ function AIGenerator({ existingTopics }: { existingTopics: {topic: string, class
     if (previewQuestions.length === 0) return;
     setLoading(true);
     try {
-      const existingQuestions = await api.getQuestionsByTopic(topic, classification);
+      const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
       
       const uniqueQuestions = previewQuestions.filter(newQ => {
         const cleanNewText = newQ.text.trim().toLowerCase().replace(/[.,;:?¿!¡]/g, '');
@@ -192,7 +193,7 @@ function AIGenerator({ existingTopics }: { existingTopics: {topic: string, class
       }
 
       const sourcePdfName = pdfFile ? pdfFile.name : undefined;
-      await api.saveBulkQuestions(uniqueQuestions, classification, topic, sourcePdfName);
+      await api.saveBulkQuestions(userId, uniqueQuestions, classification, topic, sourcePdfName);
       
       let msg = `¡Se guardaron ${uniqueQuestions.length} preguntas exitosamente!`;
       if (duplicatesCount > 0) {
@@ -547,7 +548,7 @@ function AIGenerator({ existingTopics }: { existingTopics: {topic: string, class
   );
 }
 
-function ManualCreator({ existingTopics }: { existingTopics: {topic: string, classification: string}[] }) {
+function ManualCreator({ userId, userRole, existingTopics }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, classification: string}[] }) {
   const [text, setText] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctIndex, setCorrectIndex] = useState(0);
@@ -574,7 +575,7 @@ function ManualCreator({ existingTopics }: { existingTopics: {topic: string, cla
     
     setLoading(true);
     try {
-      const existingQuestions = await api.getQuestionsByTopic(topic, classification);
+      const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
       const cleanNewText = text.trim().toLowerCase().replace(/[.,;:?¿!¡]/g, '');
       const isDuplicate = existingQuestions.some(existingQ => {
         const cleanExistingText = existingQ.text.trim().toLowerCase().replace(/[.,;:?¿!¡]/g, '');
@@ -589,7 +590,7 @@ function ManualCreator({ existingTopics }: { existingTopics: {topic: string, cla
         return;
       }
 
-      await api.createManualQuestion({
+      await api.createManualQuestion(userId, {
         text,
         options,
         correctOptionIndex: correctIndex,

@@ -62,7 +62,7 @@ export function KnowledgeHeatmap({ userId, userRole, permissions }: KnowledgeHea
       processData();
     });
 
-    const unsubQuestions = api.subscribeToQuestions(userRole, permissions, (questions) => {
+    const unsubQuestions = api.subscribeToQuestions(userId, userRole, permissions, (questions) => {
       questionsData = questions;
       questionsLoaded = true;
       processData();

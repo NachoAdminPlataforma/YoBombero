@@ -3,7 +3,11 @@ import { api } from '../lib/api';
 import { User } from '../types';
 import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2 } from 'lucide-react';
 
-export function AdminPanel() {
+interface AdminPanelProps {
+  userId: string;
+}
+
+export function AdminPanel({ userId }: AdminPanelProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +30,7 @@ export function AdminPanel() {
         throw new Error('El archivo JSON debe contener un array de preguntas.');
       }
 
-      const result = await api.importQuestions(questions);
+      const result = await api.importQuestions(userId, questions);
       if (result.success) {
         setImportStatus({ success: true, message: `Se han importado ${result.count} preguntas correctamente.` });
       } else {
@@ -48,7 +52,7 @@ export function AdminPanel() {
       setLoading(false);
     });
 
-    const unsubQuestions = api.subscribeToQuestions('admin', [], (questions) => {
+    const unsubQuestions = api.subscribeToQuestions(userId, 'admin', [], (questions) => {
       const uniqueTopics = Array.from(new Set(questions.map(q => q.topic))).sort();
       setTopics(uniqueTopics);
     });

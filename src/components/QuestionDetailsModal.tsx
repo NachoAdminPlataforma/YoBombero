@@ -6,12 +6,14 @@ import { Edit2, Save, X, Star, FileText, CheckCircle2, Clock, XCircle, AlertTria
 interface QuestionDetailsModalProps {
   question: Question;
   userId: string;
+  userRole: 'admin' | 'student';
+  permissions: string[];
   onClose: () => void;
   onUpdate: (updatedQuestion: Question) => void;
   onDelete?: (id: string) => void;
 }
 
-export function QuestionDetailsModal({ question, userId, onClose, onUpdate, onDelete }: QuestionDetailsModalProps) {
+export function QuestionDetailsModal({ question, userId, userRole, permissions, onClose, onUpdate, onDelete }: QuestionDetailsModalProps) {
   const [history, setHistory] = useState<ReviewHistory[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Question>>(question);
@@ -65,8 +67,8 @@ export function QuestionDetailsModal({ question, userId, onClose, onUpdate, onDe
   useEffect(() => {
     loadHistory();
     api.getTopicResource(question.topic, question.classification).then(setAttachedPdf);
-    api.getTopics('admin', []).then(setTopics);
-  }, [question.id, userId]);
+    api.getTopics(userId, userRole, permissions).then(setTopics);
+  }, [question.id, userId, userRole, permissions]);
 
   const loadHistory = async () => {
     setLoadingHistory(true);
