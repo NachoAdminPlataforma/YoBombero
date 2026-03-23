@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { User, Feedback } from '../types';
-import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock } from 'lucide-react';
+import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock, RefreshCw } from 'lucide-react';
 
 interface AdminPanelProps {
   userId: string;
@@ -17,6 +17,7 @@ export function AdminPanel({ userId }: AdminPanelProps) {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const handleImportJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -124,6 +125,35 @@ export function AdminPanel({ userId }: AdminPanelProps) {
     }
   };
 
+  const handleResetOnboarding = async () => {
+    setShowResetConfirm(false);
+    setImporting(true);
+    setImportStatus(null);
+    try {
+      const result = await api.resetAllUsersOnboarding(userId);
+      if (result.success) {
+        setImportStatus({
+          success: true,
+          message: `Se ha reiniciado el onboarding de ${result.count} usuarios correctamente.`
+        });
+      } else {
+        setImportStatus({
+          success: false,
+          message: "Hubo un error al reiniciar el onboarding."
+        });
+      }
+    } catch (error) {
+      console.error("Error resetting onboarding:", error);
+      setImportStatus({
+        success: false,
+        message: "Error de conexión al intentar reiniciar el onboarding."
+      });
+    } finally {
+      setImporting(false);
+      setTimeout(() => setImportStatus(null), 5000);
+    }
+  };
+
   const filteredUsers = users.filter(u => 
     u.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
     u.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -166,6 +196,40 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                 <Database size={20} />
               </div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Mantenimiento de Base de Datos</h3>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div className="space-y-1">
+                <h4 className="font-bold text-slate-900 dark:text-white">Reiniciar Onboarding (Global)</h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Fuerza a todos los usuarios (excepto admins) a repetir el proceso de configuración y los devuelve a estado 'Pendiente'.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {showResetConfirm ? (
+                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-200">
+                    <button 
+                      onClick={() => setShowResetConfirm(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      onClick={handleResetOnboarding}
+                      className="px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-all shadow-sm"
+                    >
+                      Confirmar Reinicio
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setShowResetConfirm(true)}
+                    disabled={importing}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-800 rounded-xl font-bold hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all shadow-sm disabled:opacity-50"
+                  >
+                    <RefreshCw size={18} className={importing ? 'animate-spin' : ''} />
+                    Reiniciar Todo
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">

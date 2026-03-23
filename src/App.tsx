@@ -166,20 +166,36 @@ export default function App() {
   }
 
   if (appUser?.role === 'pending') {
+    const firstName = appUser.displayName.split(' ')[0] || 'Opositor/a';
+    const emoji = getOppositionEmoji(appUser.oppositionType);
+    
     return (
       <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6 ${isDarkMode ? 'dark' : ''}`}>
         <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 text-center border border-slate-200 dark:border-slate-700">
           <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <Clock size={40} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Acceso Pendiente</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+            ¡Hola, {firstName}! {emoji}
+          </h1>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-4">Acceso Pendiente</h2>
           <p className="text-slate-600 dark:text-slate-400 mb-8">
-            Tu cuenta ha sido registrada correctamente, pero aún no tienes acceso a la plataforma. 
-            Por favor, contacta con el administrador para que active tu cuenta.
+            Tu perfil ha sido configurado correctamente. El administrador te dará acceso dentro de poco para que puedas empezar a estudiar.
           </p>
           <div className="space-y-4">
             <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400">
-              Email: <span className="font-bold text-slate-900 dark:text-white">{appUser.email}</span>
+              <div className="flex justify-between mb-1">
+                <span>Nombre:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{appUser.displayName}</span>
+              </div>
+              <div className="flex justify-between mb-1">
+                <span>Email:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{appUser.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Oposición:</span>
+                <span className="font-bold text-slate-900 dark:text-white capitalize">{appUser.oppositionType?.replace('_', ' ') || 'No definida'}</span>
+              </div>
             </div>
             <button 
               onClick={handleLogout}
@@ -259,13 +275,15 @@ export default function App() {
                   <History size={18} />
                   Historial
                 </button>
-                <button 
-                  onClick={() => setCurrentView('feedback')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'feedback' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                >
-                  <MessageSquare size={18} />
-                  Sugerencias
-                </button>
+                {appUser?.role !== 'admin' && (
+                  <button 
+                    onClick={() => setCurrentView('feedback')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'feedback' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  >
+                    <MessageSquare size={18} />
+                    Sugerencias
+                  </button>
+                )}
 
                 <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2" />
 
@@ -378,13 +396,15 @@ export default function App() {
                   <History size={20} />
                   Historial
                 </button>
-                <button 
-                  onClick={() => { setCurrentView('feedback'); setIsMenuOpen(false); }}
-                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'feedback' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                >
-                  <MessageSquare size={20} />
-                  Sugerencias
-                </button>
+                {appUser?.role !== 'admin' && (
+                  <button 
+                    onClick={() => { setCurrentView('feedback'); setIsMenuOpen(false); }}
+                    className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'feedback' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  >
+                    <MessageSquare size={20} />
+                    Sugerencias
+                  </button>
+                )}
                 
                 <div className="h-px bg-slate-200 dark:bg-slate-700 my-2" />
                 
@@ -457,7 +477,20 @@ export default function App() {
           {appUser?.role === 'admin' ? <AdminPanel userId={user.uid} /> : <div className="text-center py-20">No tienes permiso para acceder a esta sección.</div>}
         </div>
         <div className={currentView === 'feedback' ? 'block' : 'hidden'}>
-          {appUser && <FeedbackSection user={appUser} />}
+          {appUser && appUser.role !== 'admin' ? (
+            <FeedbackSection user={appUser} />
+          ) : (
+            <div className="max-w-4xl mx-auto px-4 py-20 text-center">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Sección no disponible</h2>
+              <p className="text-slate-600 dark:text-slate-400">Los administradores no pueden enviar sugerencias desde aquí. Utiliza el Panel de Administración para gestionar el feedback de los opositores.</p>
+              <button 
+                onClick={() => setCurrentView('dashboard')}
+                className="mt-8 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+              >
+                Volver al Inicio
+              </button>
+            </div>
+          )}
         </div>
         {currentView === 'test' && (
           <TestRunner 

@@ -1,6 +1,6 @@
 import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback } from '../types';
 import { GoogleGenAI, Type } from '@google/genai';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
 export enum OperationType {
@@ -869,6 +869,36 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
   async updateUserPermissions(userId: string, permissions: string[]): Promise<void> {
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { permissions });
+  },
+
+  async resetAllUsersOnboarding(adminId: string): Promise<{ success: boolean; count: number }> {
+    try {
+      const snapshot = await getDocs(collection(db, 'users'));
+      const batch = writeBatch(db);
+      let count = 0;
+
+      snapshot.docs.forEach((userDoc) => {
+        const userData = userDoc.data();
+        // Don't reset the admin who is performing the action, 
+        // and don't reset the default admin email just in case
+        if (userDoc.id !== adminId && userData.role !== 'admin' && userData.email !== 'nachotestprueba@gmail.com') {
+          batch.update(userDoc.ref, { 
+            onboardingCompleted: false,
+            role: 'pending',
+            gender: deleteField(),
+            oppositionType: deleteField(),
+            displayName: deleteField()
+          });
+          count++;
+        }
+      });
+
+      await batch.commit();
+      return { success: true, count };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users');
+      return { success: false, count: 0 };
+    }
   },
 
   subscribeToUsers(callback: (users: User[]) => void) {
