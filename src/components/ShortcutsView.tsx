@@ -4,13 +4,16 @@ import { ImageGenerator } from './ImageGenerator';
 import { LegislationAnalyzer } from './LegislationAnalyzer';
 import { Brain, Image as ImageIcon, FileText } from 'lucide-react';
 
+import { User as AppUser } from '../types';
+
 interface ShortcutsViewProps {
   userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
+  appUser: AppUser | null;
 }
 
-export function ShortcutsView({ userId, userRole, permissions }: ShortcutsViewProps) {
+export function ShortcutsView({ userId, userRole, permissions, appUser }: ShortcutsViewProps) {
   const [activeTab, setActiveTab] = useState<'phonetic' | 'images' | 'legislation'>('phonetic');
 
   const tabs = [
@@ -48,7 +51,7 @@ export function ShortcutsView({ userId, userRole, permissions }: ShortcutsViewPr
           <PhoneticTool />
         </div>
         <div className={activeTab === 'images' ? 'animate-in fade-in slide-in-from-bottom-2 duration-300' : 'hidden'}>
-          <ImageGenerator />
+          <ImageGenerator appUser={appUser} />
         </div>
         <div className={activeTab === 'legislation' ? 'animate-in fade-in slide-in-from-bottom-2 duration-300' : 'hidden'}>
           <LegislationAnalyzer userId={userId} userRole={userRole} permissions={permissions} />

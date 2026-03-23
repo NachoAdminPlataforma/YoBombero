@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { User, Feedback } from '../types';
-import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock, RefreshCw } from 'lucide-react';
+import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock, RefreshCw, AlertTriangle, Sparkles } from 'lucide-react';
 
 interface AdminPanelProps {
   userId: string;
@@ -11,13 +11,16 @@ export function AdminPanel({ userId }: AdminPanelProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
+  const [surveyResponses, setSurveyResponses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'users' | 'feedback'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'feedback' | 'survey'>('users');
+  const [userFilter, setUserFilter] = useState<'all' | 'active' | 'pending' | 'blocked'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<{id: string, email: string} | null>(null);
 
   const handleImportJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -64,14 +67,19 @@ export function AdminPanel({ userId }: AdminPanelProps) {
       setFeedback(data);
     });
 
+    const unsubSurvey = api.subscribeToSurveyResponses((data) => {
+      setSurveyResponses(data);
+    });
+
     return () => {
       unsubUsers();
       unsubQuestions();
       unsubFeedback();
+      unsubSurvey();
     };
   }, [userId]);
 
-  const handleRoleChange = async (userId: string, newRole: 'admin' | 'student' | 'pending') => {
+  const handleRoleChange = async (userId: string, newRole: 'admin' | 'student' | 'pending' | 'blocked') => {
     try {
       await api.updateUserRole(userId, newRole);
     } catch (error) {
@@ -108,6 +116,20 @@ export function AdminPanel({ userId }: AdminPanelProps) {
       await api.updateFeedbackStatus(feedbackId, currentStatus === 'pending' ? 'reviewed' : 'pending');
     } catch (error) {
       alert('Error al actualizar el estado del feedback.');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userEmail: string) => {
+    setUserToDelete({ id: userId, email: userEmail });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    try {
+      await api.deleteUser(userToDelete.id);
+      setUserToDelete(null);
+    } catch (error) {
+      alert('Error al eliminar el usuario.');
     }
   };
 
@@ -154,10 +176,18 @@ export function AdminPanel({ userId }: AdminPanelProps) {
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users.filter(u => {
+    const matchesSearch = u.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      u.displayName?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    
+    if (userFilter === 'active') return u.role === 'admin' || u.role === 'student';
+    if (userFilter === 'pending') return u.role === 'pending';
+    if (userFilter === 'blocked') return u.role === 'blocked';
+    // By default 'all' excludes blocked users to make it a separate space
+    return u.role !== 'blocked';
+  });
 
   if (loading) return <div className="text-center py-12 text-slate-500">Cargando panel de administración...</div>;
 
@@ -183,6 +213,12 @@ export function AdminPanel({ userId }: AdminPanelProps) {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'feedback' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
           >
             Feedback
+          </button>
+          <button
+            onClick={() => setActiveTab('survey')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'survey' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            Encuesta
           </button>
         </div>
       </div>
@@ -317,11 +353,24 @@ export function AdminPanel({ userId }: AdminPanelProps) {
           </div>
 
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">
-                <Users size={20} />
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                  <Users size={20} />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Gestión de Usuarios</h3>
               </div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Gestión de Usuarios</h3>
+              <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-[10px] font-bold uppercase tracking-wider">
+                {(['all', 'active', 'pending', 'blocked'] as const).map(filter => (
+                  <button
+                    key={filter}
+                    onClick={() => setUserFilter(filter)}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${userFilter === filter ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    {filter === 'all' ? 'Todos' : filter === 'active' ? 'Activos' : filter === 'pending' ? 'Pendientes' : 'Papelera'}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="relative mb-6">
@@ -353,9 +402,10 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                       <div className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                         user.role === 'admin' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 
                         user.role === 'pending' ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400' :
+                        user.role === 'blocked' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' :
                         'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'
                       }`}>
-                        {user.role}
+                        {user.role === 'blocked' ? 'Bloqueado' : user.role}
                       </div>
                       {expandedUser === user.id ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
                     </div>
@@ -371,13 +421,17 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                             Rol de Usuario
                           </h4>
                           <div className="flex gap-2">
-                            {(['student', 'admin', 'pending'] as const).map(role => (
+                            {(['student', 'admin', 'pending', 'blocked'] as const).map(role => (
                               <button
                                 key={role}
                                 onClick={() => handleRoleChange(user.id, role)}
-                                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${user.role === role ? 'bg-indigo-600 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-indigo-500'}`}
+                                className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                                  user.role === role 
+                                    ? (role === 'blocked' ? 'bg-rose-600 text-white shadow-md' : 'bg-indigo-600 text-white shadow-md') 
+                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-indigo-500'
+                                }`}
                               >
-                                {role.toUpperCase()}
+                                {role === 'blocked' ? 'PAPELERA' : role.toUpperCase()}
                               </button>
                             ))}
                           </div>
@@ -424,6 +478,17 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                           ))}
                         </div>
                       </div>
+
+                      {/* Danger Zone */}
+                      <div className="pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                        <button
+                          onClick={() => handleDeleteUser(user.id, user.email)}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
+                        >
+                          <Trash2 size={14} />
+                          Eliminar Usuario Permanentemente
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -431,7 +496,7 @@ export function AdminPanel({ userId }: AdminPanelProps) {
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'feedback' ? (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -505,6 +570,103 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="text-indigo-500" size={20} />
+              Resultados de la Encuesta: Generador de Imágenes
+            </h2>
+            <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-full text-xs font-bold">
+              {surveyResponses.length} Votos
+            </span>
+          </div>
+
+          {/* Summary Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {["Sí, me encantaría tenerlo", "Sí, pero depende del precio", "No me interesa", "Prefiero otras funcionalidades antes"].map(option => {
+              const count = surveyResponses.filter(r => r.answer === option).length;
+              const percentage = surveyResponses.length > 0 ? Math.round((count / surveyResponses.length) * 100) : 0;
+              return (
+                <div key={option} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">{option}</span>
+                    <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{count} ({percentage}%)</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-indigo-500 transition-all duration-500" 
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Detalle de Votaciones</h3>
+            {surveyResponses.length === 0 ? (
+              <div className="text-center py-12 text-slate-500">Nadie ha votado todavía.</div>
+            ) : (
+              surveyResponses.map(response => (
+                <div key={response.id} className="p-4 border border-slate-100 dark:border-slate-700 rounded-xl flex items-center justify-between bg-white dark:bg-slate-800/50">
+                  <div className="flex items-center gap-3">
+                    {response.userPhoto ? (
+                      <img src={response.userPhoto} alt="" className="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-700" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                        <Users size={18} className="text-slate-400" />
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white text-sm">{response.userName}</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400">{response.userEmail}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 rounded-full text-[10px] font-bold border border-indigo-100 dark:border-indigo-800 mb-1">
+                      {response.answer}
+                    </div>
+                    <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1">
+                      <Clock size={10} />
+                      {new Date(response.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      {/* User Deletion Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400 mb-4">
+              <AlertTriangle size={24} />
+              <h3 className="text-lg font-bold">¿Eliminar usuario?</h3>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
+              ¿Estás seguro de que quieres eliminar permanentemente a <span className="font-semibold text-slate-900 dark:text-white">{userToDelete.email}</span>? 
+              Esta acción eliminará todos sus datos de progreso, historial y feedback. <span className="font-bold text-rose-600 dark:text-rose-400">Esta acción no se puede deshacer.</span>
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setUserToDelete(null)}
+                className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                className="flex-1 px-4 py-2 bg-rose-600 text-white rounded-xl font-medium hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20"
+              >
+                Eliminar
+              </button>
+            </div>
           </div>
         </div>
       )}

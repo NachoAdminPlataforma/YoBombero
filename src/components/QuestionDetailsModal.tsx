@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Question, ReviewHistory } from '../types';
 import { api } from '../lib/api';
-import { Edit2, Save, X, Star, FileText, CheckCircle2, Clock, XCircle, AlertTriangle, Sparkles, Plus, Trash2, Loader2, Folder, ChevronRight } from 'lucide-react';
+import { Edit2, Save, X, Star, FileText, CheckCircle2, Clock, XCircle, AlertTriangle, Sparkles, Plus, Trash2, Loader2, Folder, ChevronRight, MessageSquare } from 'lucide-react';
 
 interface QuestionDetailsModalProps {
   question: Question;
@@ -26,6 +26,9 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
   const [topics, setTopics] = useState<{topic: string, classification: string}[]>([]);
   const [isMoving, setIsMoving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [duplicateFound, setDuplicateFound] = useState<Question | null>(null);
+  const [comments, setComments] = useState<string[]>(question.comments || []);
+  const [newComment, setNewComment] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<{
     classification: 'Legislativo' | 'Específico';
     topic: string;
@@ -188,6 +191,13 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
 
   const handleMoveQuestion = async () => {
     try {
+      // Check for duplicate in destination
+      const duplicate = await api.checkDuplicateQuestion(question.text, selectedFolder.topic, selectedFolder.classification);
+      if (duplicate && duplicate.id !== question.id) {
+        setDuplicateFound(duplicate);
+        return;
+      }
+
       await api.moveQuestions([question.id], selectedFolder);
       onUpdate({ ...question, ...selectedFolder } as Question);
       setIsMoving(false);
@@ -195,6 +205,47 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
     } catch (e) {
       console.error("Error moving question", e);
       alert("Error al mover la pregunta.");
+    }
+  };
+
+  const handleConfirmMoveAndDeleteDuplicate = async () => {
+    if (!duplicateFound) return;
+    try {
+      // Delete the duplicate first
+      await api.deleteQuestion(duplicateFound.id);
+      // Then move the current one
+      await api.moveQuestions([question.id], selectedFolder);
+      onUpdate({ ...question, ...selectedFolder } as Question);
+      setDuplicateFound(null);
+      setIsMoving(false);
+      onClose();
+    } catch (e) {
+      console.error("Error moving question and deleting duplicate", e);
+      alert("Error al procesar el movimiento.");
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim()) return;
+    const updatedComments = [...comments, newComment.trim()];
+    try {
+      await api.updateQuestionComments(question.id, updatedComments);
+      setComments(updatedComments);
+      setNewComment('');
+      onUpdate({ ...question, comments: updatedComments });
+    } catch (e) {
+      console.error("Error adding comment", e);
+    }
+  };
+
+  const handleRemoveComment = async (index: number) => {
+    const updatedComments = comments.filter((_, i) => i !== index);
+    try {
+      await api.updateQuestionComments(question.id, updatedComments);
+      setComments(updatedComments);
+      onUpdate({ ...question, comments: updatedComments });
+    } catch (e) {
+      console.error("Error removing comment", e);
     }
   };
 
@@ -576,6 +627,48 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
             </div>
           </div>
 
+          {/* Comments Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <MessageSquare size={18} className="text-indigo-600 dark:text-indigo-400" /> 
+                Comentarios
+              </h3>
+            </div>
+
+            <div className="space-y-3">
+              {comments.map((c, idx) => (
+                <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl relative group">
+                  <p className="text-sm text-slate-700 dark:text-slate-300 pr-8 italic">"{c}"</p>
+                  <button 
+                    onClick={() => handleRemoveComment(idx)}
+                    className="absolute top-3 right-3 p-1 text-slate-300 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Añade un comentario personal..."
+                  className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-900 dark:text-white"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+                />
+                <button 
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim()}
+                  className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* History Table */}
           <div>
             <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-4">
@@ -622,6 +715,36 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
           </div>
         </div>
       </div>
+
+      {/* Duplicate Question Confirmation Modal */}
+      {duplicateFound && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400 mb-4">
+              <AlertTriangle size={24} />
+              <h3 className="text-lg font-bold">Pregunta duplicada detectada</h3>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
+              Ya existe una pregunta idéntica en el tema de destino (<strong>{selectedFolder.topic}</strong>). 
+              ¿Quieres eliminar la pregunta duplicada y mover esta en su lugar?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDuplicateFound(null)}
+                className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmMoveAndDeleteDuplicate}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20"
+              >
+                Eliminar duplicado y mover
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

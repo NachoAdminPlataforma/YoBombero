@@ -6,12 +6,11 @@ import { QuestionDatabase } from './components/QuestionDatabase';
 import { TestHistory } from './components/TestHistory';
 import { ShortcutsView } from './components/ShortcutsView';
 import { GlobalSearch } from './components/GlobalSearch';
-import { TutorChat } from './components/TutorChat';
 import { AdminPanel } from './components/AdminPanel';
 import { OnboardingModal } from './components/OnboardingModal';
 import { FeedbackSection } from './components/FeedbackSection';
 import { Question, User as AppUser, Feedback } from './types';
-import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock, Heart } from 'lucide-react';
+import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock, Heart, Shield } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -31,7 +30,6 @@ export default function App() {
     return false;
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isTutorOpen, setIsTutorOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -163,6 +161,34 @@ export default function App() {
 
   if (appUser && !appUser.onboardingCompleted) {
     return <OnboardingModal user={appUser} onComplete={(updated) => setAppUser(updated)} />;
+  }
+
+  if (appUser?.role === 'blocked') {
+    return (
+      <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6 ${isDarkMode ? 'dark' : ''}`}>
+        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 text-center border border-slate-200 dark:border-slate-700">
+          <div className="w-20 h-20 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Shield size={40} className="text-rose-600 dark:text-rose-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Acceso Restringido</h1>
+          <p className="text-slate-600 dark:text-slate-400 mb-8">
+            Tu cuenta ha sido bloqueada por el administrador. Si crees que esto es un error, por favor contacta con soporte.
+          </p>
+          <div className="space-y-4">
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400">
+              Email: <span className="font-bold text-slate-900 dark:text-white">{appUser.email}</span>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="w-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-all"
+            >
+              <LogIn size={18} className="rotate-180" />
+              Cerrar Sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (appUser?.role === 'pending') {
@@ -454,6 +480,7 @@ export default function App() {
             userId={user.uid}
             userRole={appUser?.role || 'student'} 
             permissions={appUser?.permissions || []} 
+            appUser={appUser}
           />
         </div>
         <div className={currentView === 'create' ? 'block' : 'hidden'}>
@@ -503,17 +530,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating AI Tutor Button */}
-      {currentView !== 'test' && (
-        <button 
-          onClick={() => setIsTutorOpen(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-40"
-          title="Tutor IA 24/7"
-        >
-          <MessageSquare size={28} />
-        </button>
-      )}
-
       {/* Modals */}
       <GlobalSearch 
         isOpen={isSearchOpen} 
@@ -522,7 +538,6 @@ export default function App() {
         userRole={appUser?.role || 'student'} 
         permissions={appUser?.permissions || []} 
       />
-      <TutorChat isOpen={isTutorOpen} onClose={() => setIsTutorOpen(false)} />
     </div>
   );
 }

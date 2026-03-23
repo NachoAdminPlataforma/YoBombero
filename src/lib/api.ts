@@ -1,4 +1,4 @@
-import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback } from '../types';
+import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback, SurveyResponse } from '../types';
 import { GoogleGenAI, Type } from '@google/genai';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from './firebase';
@@ -621,6 +621,30 @@ export const api = {
     await updateDoc(questionRef, data);
   },
 
+  async updateQuestionComments(id: string, comments: string[]): Promise<void> {
+    const questionRef = doc(db, 'questions', id);
+    await updateDoc(questionRef, { comments });
+  },
+
+  async checkDuplicateQuestion(text: string, topic: string, classification: string): Promise<Question | null> {
+    try {
+      const q = query(
+        collection(db, 'questions'), 
+        where('topic', '==', topic), 
+        where('classification', '==', classification),
+        where('text', '==', text)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Question;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error checking duplicate:", error);
+      return null;
+    }
+  },
+
   async moveQuestions(ids: string[], destination: { classification: string, topic?: string }): Promise<void> {
     const batch = writeBatch(db);
     ids.forEach(id => {
@@ -861,9 +885,42 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
     }
   },
 
-  async updateUserRole(userId: string, role: 'admin' | 'student' | 'pending'): Promise<void> {
+  async updateUserRole(userId: string, role: 'admin' | 'student' | 'pending' | 'blocked'): Promise<void> {
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { role });
+  },
+
+  async deleteUser(userId: string): Promise<void> {
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Delete user document
+      batch.delete(doc(db, 'users', userId));
+      
+      // 2. Delete user progress
+      const progressSnapshot = await getDocs(query(collection(db, 'user_progress'), where('userId', '==', userId)));
+      progressSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      
+      // 3. Delete review history
+      const historySnapshot = await getDocs(query(collection(db, 'review_history'), where('userId', '==', userId)));
+      historySnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      
+      // 4. Delete test sessions
+      const sessionsSnapshot = await getDocs(query(collection(db, 'test_sessions'), where('userId', '==', userId)));
+      sessionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      
+      // 5. Delete feedback
+      const feedbackSnapshot = await getDocs(query(collection(db, 'feedback'), where('userId', '==', userId)));
+      feedbackSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+      // 6. Delete questions created by the user (if any)
+      const questionsSnapshot = await getDocs(query(collection(db, 'questions'), where('userId', '==', userId)));
+      questionsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+      
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+    }
   },
 
   async updateUserPermissions(userId: string, permissions: string[]): Promise<void> {
@@ -954,6 +1011,44 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `feedback/${feedbackId}`);
     }
+  },
+
+  async saveSurveyResponse(userId: string, user: User, answer: string): Promise<void> {
+    try {
+      await setDoc(doc(db, 'survey_responses', userId), {
+        userId,
+        userEmail: user.email,
+        userName: user.displayName,
+        userPhoto: user.photoURL,
+        answer,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `survey_responses/${userId}`);
+    }
+  },
+
+  async getSurveyResponse(userId: string): Promise<SurveyResponse | null> {
+    try {
+      const docSnap = await getDoc(doc(db, 'survey_responses', userId));
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as SurveyResponse;
+      }
+      return null;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `survey_responses/${userId}`);
+      return null;
+    }
+  },
+
+  subscribeToSurveyResponses(callback: (responses: SurveyResponse[]) => void): () => void {
+    const q = query(collection(db, 'survey_responses'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      const responses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SurveyResponse));
+      callback(responses);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'survey_responses');
+    });
   },
 };
 

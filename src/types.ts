@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   email: string;
-  role: 'admin' | 'student' | 'pending';
+  role: 'admin' | 'student' | 'pending' | 'blocked';
   displayName: string;
   photoURL: string;
   permissions: string[];
@@ -47,6 +47,7 @@ export interface Question {
   flaggedForCorrection?: boolean;
   correctionComment?: string;
   mnemonics?: string[];
+  comments?: string[];
   createdAt?: string;
 }
 
@@ -91,5 +92,15 @@ export interface TopicResource {
   fileName: string;
   fileContent?: string; // Base64
   extractedText?: string;
+  createdAt: string;
+}
+
+export interface SurveyResponse {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  userPhoto?: string;
+  answer: string;
   createdAt: string;
 }

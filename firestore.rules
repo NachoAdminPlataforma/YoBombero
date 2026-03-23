@@ -129,7 +129,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return hasRequiredFields(['email', 'role']) &&
              data.email is string && isValidEmail(data.email) &&
-             data.role in ['admin', 'student', 'pending'] &&
+             data.role in ['admin', 'student', 'pending', 'blocked'] &&
              (!('permissions' in data) || data.permissions is list) &&
              (!('gender' in data) || data.gender in ['Opositor', 'Opositora']) &&
              (!('oppositionType' in data) || data.oppositionType is string) &&
@@ -210,6 +210,7 @@ service cloud.firestore {
                       (request.resource.data.role == 'pending' || isAdmin());
       allow update: if isAuthenticated() && isValidUser(request.resource.data) &&
                       (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
+      allow delete: if isAdmin();
     }
 
     match /questions/{questionId} {

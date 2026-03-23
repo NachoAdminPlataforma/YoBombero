@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Question } from '../types';
 import { calculateNextReview } from '../lib/spacedRepetition';
 import { api } from '../lib/api';
-import { Lightbulb, ArrowRight, CheckCircle2, XCircle, Brain, Star, Save, Edit2, Flag, ChevronDown, AlertTriangle, Pause, Play } from 'lucide-react';
+import { Lightbulb, ArrowRight, CheckCircle2, XCircle, Brain, Star, Save, Edit2, Flag, ChevronDown, AlertTriangle, Pause, Play, MessageSquare, Trash2, Plus } from 'lucide-react';
 import { QuestionDetailsModal } from './QuestionDetailsModal';
 
 interface TestRunnerProps {
@@ -23,6 +23,9 @@ export function TestRunner({ questions, onComplete, userId, userRole, permission
   const [finalScore, setFinalScore] = useState(0);
   const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
   const [isPaused, setIsPaused] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [isAddingComment, setIsAddingComment] = useState(false);
   const [pauseStartTime, setPauseStartTime] = useState<number | null>(null);
   const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
   
@@ -369,6 +372,38 @@ export function TestRunner({ questions, onComplete, userId, userRole, permission
       alert('Error al guardar la mnemotecnia.');
     } finally {
       setSavingMnemonic(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || isAddingComment) return;
+    
+    setIsAddingComment(true);
+    try {
+      const currentComments = currentQuestion.comments || [];
+      const updatedComments = [...currentComments, newComment.trim()];
+      await api.updateQuestionComments(currentQuestion.id, updatedComments);
+      
+      // Update local state
+      currentQuestion.comments = updatedComments;
+      setNewComment('');
+    } catch (error) {
+      console.error('Error adding comment:', error);
+    } finally {
+      setIsAddingComment(false);
+    }
+  };
+
+  const handleRemoveComment = async (commentIndex: number) => {
+    try {
+      const currentComments = currentQuestion.comments || [];
+      const updatedComments = currentComments.filter((_, i) => i !== commentIndex);
+      await api.updateQuestionComments(currentQuestion.id, updatedComments);
+      
+      // Update local state
+      currentQuestion.comments = updatedComments;
+    } catch (error) {
+      console.error('Error removing comment:', error);
     }
   };
 
@@ -860,12 +895,71 @@ export function TestRunner({ questions, onComplete, userId, userRole, permission
               )}
               
               <button
+                onClick={() => setShowComments(!showComments)}
+                className={`flex-1 font-semibold py-3 md:py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm md:text-base border ${
+                  showComments 
+                    ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' 
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <MessageSquare size={20} /> Comentarios ({currentQuestion.comments?.length || 0})
+              </button>
+
+              <button
                 onClick={handleNext}
                 className="flex-1 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-700 text-white font-semibold py-3 md:py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm md:text-base"
               >
                 Saltar / Siguiente <ArrowRight size={20} />
               </button>
             </div>
+
+            {showComments && (
+              <div className="mt-6 p-6 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-bold mb-4">
+                  <MessageSquare size={20} />
+                  <span>Comentarios de la Pregunta</span>
+                </div>
+                
+                <div className="space-y-3 mb-4">
+                  {currentQuestion.comments && currentQuestion.comments.length > 0 ? (
+                    currentQuestion.comments.map((comment, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 group">
+                        <div className="flex-1 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                          {comment}
+                        </div>
+                        <button
+                          onClick={() => handleRemoveComment(idx)}
+                          className="p-1 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Eliminar comentario"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">No hay comentarios aún.</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+                    placeholder="Añadir un comentario..."
+                    className="flex-1 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <button
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim() || isAddingComment}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white p-2 rounded-lg transition-colors"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {mnemonic && (
               <div className="mt-6 p-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
