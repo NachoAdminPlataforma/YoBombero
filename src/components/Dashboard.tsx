@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Question } from '../types';
-import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
+import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { KnowledgeHeatmap } from './KnowledgeHeatmap';
+import { User as AppUser } from '../types';
 
 interface DashboardProps {
   onStartTest: (questions: Question[]) => void;
   userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
+  appUser: AppUser | null;
 }
 
-export function Dashboard({ onStartTest, userId, userRole, permissions }: DashboardProps) {
+export function Dashboard({ onStartTest, userId, userRole, permissions, appUser }: DashboardProps) {
   const [urgentCount, setUrgentCount] = useState(0);
   const [newCount, setNewCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
@@ -22,6 +24,40 @@ export function Dashboard({ onStartTest, userId, userRole, permissions }: Dashbo
   const [numQuestions, setNumQuestions] = useState<number>(10);
   const [loading, setLoading] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
+
+  const getOppositionEmoji = (type?: string) => {
+    switch (type) {
+      case 'bombero': return '🚒';
+      case 'policia': return '👮';
+      case 'guardia_civil': return '🚔';
+      case 'justicia': return '⚖️';
+      case 'administrativo': return '📂';
+      case 'sanitario': return '🏥';
+      default: return '📚';
+    }
+  };
+
+  const getWelcomeMessage = () => {
+    if (!appUser) return "¡Hola!";
+    const genderLabel = appUser.gender || 'Opositor/a';
+    const name = appUser.displayName.split(' ')[0] || '';
+    const emoji = getOppositionEmoji(appUser.oppositionType);
+    
+    let specificMsg = "";
+    if (appUser.oppositionType === 'bombero') specificMsg = "¡A por el fuego! 🔥";
+    else if (appUser.oppositionType === 'policia') specificMsg = "¡Servir y proteger! 👮";
+    else if (appUser.oppositionType === 'justicia') specificMsg = "¡Hágase justicia! ⚖️";
+    
+    const messages = [
+      `¡Vamos con todo, ${genderLabel} ${name}! ${emoji}`,
+      `Cada pregunta cuenta, ${name}. ¡A por la plaza! 🎯`,
+      `Hoy es un gran día para avanzar, ${genderLabel}. 🚀`,
+      `Tu esfuerzo de hoy es tu éxito de mañana. 🌟`,
+      specificMsg
+    ].filter(m => m !== "");
+    
+    return messages[Math.floor(Math.random() * messages.length)];
+  };
 
   useEffect(() => {
     const unsubscribe = api.subscribeToTopics(userId, userRole, permissions, (t) => {
@@ -121,8 +157,11 @@ export function Dashboard({ onStartTest, userId, userRole, permissions }: Dashbo
       {/* Welcome Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">¡Hola de nuevo! 👋</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Tu camino hacia la plaza de bombero continúa aquí.</p>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            <Sparkles className="text-indigo-500" size={28} />
+            {getWelcomeMessage()}
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">Tu camino hacia la plaza continúa aquí.</p>
         </div>
       </div>
 

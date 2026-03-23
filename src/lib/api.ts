@@ -1,4 +1,4 @@
-import { Question, SavedPrompt, ReviewHistory, TestSession, User } from '../types';
+import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback } from '../types';
 import { GoogleGenAI, Type } from '@google/genai';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
@@ -879,7 +879,52 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'users');
     });
-  }
+  },
+
+  async updateUserProfile(userId: string, data: Partial<User>): Promise<void> {
+    const userRef = doc(db, 'users', userId);
+    try {
+      await updateDoc(userRef, data);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    }
+  },
+
+  async submitFeedback(feedback: Omit<Feedback, 'id' | 'createdAt' | 'status'>): Promise<void> {
+    try {
+      await addDoc(collection(db, 'feedback'), {
+        ...feedback,
+        createdAt: new Date().toISOString(),
+        status: 'pending'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'feedback');
+    }
+  },
+
+  subscribeToFeedback(callback: (feedback: Feedback[]) => void): () => void {
+    const q = query(collection(db, 'feedback'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      const feedback = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback));
+      callback(feedback);
+    });
+  },
+
+  async deleteFeedback(feedbackId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, 'feedback', feedbackId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `feedback/${feedbackId}`);
+    }
+  },
+
+  async updateFeedbackStatus(feedbackId: string, status: 'pending' | 'reviewed'): Promise<void> {
+    try {
+      await updateDoc(doc(db, 'feedback', feedbackId), { status });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `feedback/${feedbackId}`);
+    }
+  },
 };
 
 function fixEncodingArtifacts(text: string): string {

@@ -8,8 +8,10 @@ import { ShortcutsView } from './components/ShortcutsView';
 import { GlobalSearch } from './components/GlobalSearch';
 import { TutorChat } from './components/TutorChat';
 import { AdminPanel } from './components/AdminPanel';
-import { Question, User as AppUser } from './types';
-import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock } from 'lucide-react';
+import { OnboardingModal } from './components/OnboardingModal';
+import { FeedbackSection } from './components/FeedbackSection';
+import { Question, User as AppUser, Feedback } from './types';
+import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock, Heart } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -18,7 +20,7 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'test' | 'database' | 'history' | 'shortcuts' | 'admin'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'test' | 'database' | 'history' | 'shortcuts' | 'admin' | 'feedback'>('dashboard');
   const [testQuestions, setTestQuestions] = useState<Question[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -110,6 +112,18 @@ export default function App() {
     }
   };
 
+  const getOppositionEmoji = (type?: string) => {
+    switch (type) {
+      case 'bombero': return '🚒';
+      case 'policia': return '👮';
+      case 'guardia_civil': return '🚔';
+      case 'justicia': return '⚖️';
+      case 'administrativo': return '📂';
+      case 'sanitario': return '🏥';
+      default: return '📚';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
@@ -125,7 +139,7 @@ export default function App() {
           <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <BookOpen size={40} />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Academia Test 🚒</h1>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Mi Plataforma Test 📚</h1>
           <p className="text-slate-600 dark:text-slate-400 mb-8">Inicia sesión para acceder a tus tests y seguir tu progreso.</p>
           <button 
             onClick={handleLogin}
@@ -145,6 +159,10 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  if (appUser && !appUser.onboardingCompleted) {
+    return <OnboardingModal user={appUser} onComplete={(updated) => setAppUser(updated)} />;
   }
 
   if (appUser?.role === 'pending') {
@@ -185,7 +203,14 @@ export default function App() {
             <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
               <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xl tracking-tight cursor-pointer" onClick={() => setCurrentView('dashboard')}>
                 <BookOpen size={24} />
-                <span className="truncate">Plataforma Test 🚒</span>
+                <span className="truncate">
+                  Mi Plataforma Test {appUser?.oppositionType === 'bombero' ? '🚒' : 
+                                    appUser?.oppositionType === 'policia' ? '👮' : 
+                                    appUser?.oppositionType === 'guardia_civil' ? '🚔' : 
+                                    appUser?.oppositionType === 'justicia' ? '⚖️' : 
+                                    appUser?.oppositionType === 'administrativo' ? '📂' : 
+                                    appUser?.oppositionType === 'sanitario' ? '🏥' : '📚'}
+                </span>
               </div>
               
               {/* Desktop Navigation */}
@@ -204,24 +229,20 @@ export default function App() {
                   <Zap size={18} />
                   Atajos
                 </button>
-                {appUser?.role === 'admin' && (
-                  <button 
-                    onClick={() => setCurrentView('create')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'create' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                  >
-                    <PlusCircle size={18} />
-                    Crear Preguntas
-                  </button>
-                )}
-                {appUser?.role === 'admin' && (
-                  <button 
-                    onClick={() => setCurrentView('database')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'database' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                  >
-                    <Database size={18} />
-                    Base de Datos
-                  </button>
-                )}
+                <button 
+                  onClick={() => setCurrentView('create')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'create' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                >
+                  <PlusCircle size={18} />
+                  Crear Preguntas
+                </button>
+                <button 
+                  onClick={() => setCurrentView('database')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'database' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                >
+                  <Database size={18} />
+                  Base de Datos
+                </button>
                 {appUser?.role === 'admin' && (
                   <button 
                     onClick={() => setCurrentView('admin')}
@@ -238,43 +259,50 @@ export default function App() {
                   <History size={18} />
                   Historial
                 </button>
+                <button 
+                  onClick={() => setCurrentView('feedback')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'feedback' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                >
+                  <MessageSquare size={18} />
+                  Sugerencias
+                </button>
 
                 <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2" />
 
-                <div className="flex items-center gap-3 ml-2">
-                  <div className="flex flex-col items-end hidden sm:flex">
+                <div className="flex items-center gap-3 ml-2 border-l border-slate-200 dark:border-slate-700 pl-4">
+                  <div className="flex flex-col items-end hidden xl:flex">
                     <span className="text-xs font-bold text-slate-900 dark:text-white">{appUser?.displayName}</span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                       {appUser?.role === 'admin' ? <ShieldCheck size={10} className="text-amber-500" /> : <GraduationCap size={10} className="text-indigo-500" />}
-                      {appUser?.role === 'admin' ? 'Administrador' : 'Estudiante'}
+                      {appUser?.role === 'admin' ? 'Administrador' : (appUser?.gender || 'Opositor/a')}
                     </span>
                   </div>
-                  <img src={appUser?.photoURL} alt="" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" referrerPolicy="no-referrer" />
-                  <button 
-                    onClick={handleLogout}
-                    className="p-2 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    title="Cerrar Sesión"
-                  >
-                    <LogOut size={20} />
-                  </button>
+                  <img src={appUser?.photoURL} alt="" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 flex-shrink-0" referrerPolicy="no-referrer" />
+                  
+                  <div className="flex items-center gap-2 ml-2">
+                    <button 
+                      onClick={() => setIsSearchOpen(true)}
+                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      title="Buscador Global"
+                    >
+                      <Search size={20} />
+                    </button>
+                    <button 
+                      onClick={() => setIsDarkMode(!isDarkMode)}
+                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
+                    >
+                      {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                    </button>
+                    <button 
+                      onClick={handleLogout}
+                      className="p-2 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title="Cerrar Sesión"
+                    >
+                      <LogOut size={20} />
+                    </button>
+                  </div>
                 </div>
-
-                <button 
-                  onClick={() => setIsSearchOpen(true)}
-                  className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                  title="Buscador Global"
-                >
-                  <Search size={20} />
-                </button>
-
-                <button 
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2"
-                  title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
-                >
-                  {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-                  <span className="text-[10px] font-bold uppercase lg:hidden">{isDarkMode ? 'Oscuro' : 'Claro'}</span>
-                </button>
               </nav>
 
               {/* Mobile/Tablet Menu Button */}
@@ -320,24 +348,20 @@ export default function App() {
                   <Zap size={20} />
                   Atajos
                 </button>
-                {appUser?.role === 'admin' && (
-                  <button 
-                    onClick={() => { setCurrentView('create'); setIsMenuOpen(false); }}
-                    className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'create' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                  >
-                    <PlusCircle size={20} />
-                    Crear Preguntas
-                  </button>
-                )}
-                {appUser?.role === 'admin' && (
-                  <button 
-                    onClick={() => { setCurrentView('database'); setIsMenuOpen(false); }}
-                    className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'database' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                  >
-                    <Database size={20} />
-                    Base de Datos
-                  </button>
-                )}
+                <button 
+                  onClick={() => { setCurrentView('create'); setIsMenuOpen(false); }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'create' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                >
+                  <PlusCircle size={20} />
+                  Crear Preguntas
+                </button>
+                <button 
+                  onClick={() => { setCurrentView('database'); setIsMenuOpen(false); }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'database' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                >
+                  <Database size={20} />
+                  Base de Datos
+                </button>
                 {appUser?.role === 'admin' && (
                   <button 
                     onClick={() => { setCurrentView('admin'); setIsMenuOpen(false); }}
@@ -354,6 +378,13 @@ export default function App() {
                   <History size={20} />
                   Historial
                 </button>
+                <button 
+                  onClick={() => { setCurrentView('feedback'); setIsMenuOpen(false); }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'feedback' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                >
+                  <MessageSquare size={20} />
+                  Sugerencias
+                </button>
                 
                 <div className="h-px bg-slate-200 dark:bg-slate-700 my-2" />
                 
@@ -363,7 +394,7 @@ export default function App() {
                     <div className="text-sm font-bold text-slate-900 dark:text-white">{appUser?.displayName}</div>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                       {appUser?.role === 'admin' ? <ShieldCheck size={10} className="text-amber-500" /> : <GraduationCap size={10} className="text-indigo-500" />}
-                      {appUser?.role === 'admin' ? 'Administrador' : 'Estudiante'}
+                      {appUser?.role === 'admin' ? 'Administrador' : (appUser?.gender || 'Opositor/a')}
                     </div>
                   </div>
                   <button 
@@ -395,6 +426,7 @@ export default function App() {
             userId={user.uid} 
             userRole={appUser?.role || 'student'} 
             permissions={appUser?.permissions || []} 
+            appUser={appUser}
           />
         </div>
         <div className={currentView === 'shortcuts' ? 'block' : 'hidden'}>
@@ -423,6 +455,9 @@ export default function App() {
         </div>
         <div className={currentView === 'admin' ? 'block' : 'hidden'}>
           {appUser?.role === 'admin' ? <AdminPanel userId={user.uid} /> : <div className="text-center py-20">No tienes permiso para acceder a esta sección.</div>}
+        </div>
+        <div className={currentView === 'feedback' ? 'block' : 'hidden'}>
+          {appUser && <FeedbackSection user={appUser} />}
         </div>
         {currentView === 'test' && (
           <TestRunner 

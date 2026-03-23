@@ -130,7 +130,21 @@ service cloud.firestore {
       return hasRequiredFields(['email', 'role']) &&
              data.email is string && isValidEmail(data.email) &&
              data.role in ['admin', 'student', 'pending'] &&
-             (!('permissions' in data) || data.permissions is list);
+             (!('permissions' in data) || data.permissions is list) &&
+             (!('gender' in data) || data.gender in ['Opositor', 'Opositora']) &&
+             (!('oppositionType' in data) || data.oppositionType is string) &&
+             (!('onboardingCompleted' in data) || data.onboardingCompleted is bool);
+    }
+
+    function isValidFeedback(data) {
+      return hasRequiredFields(['userId', 'userEmail', 'userName', 'message', 'type', 'createdAt', 'status']) &&
+             data.userId is string &&
+             data.userEmail is string && isValidEmail(data.userEmail) &&
+             data.userName is string &&
+             data.message is string && data.message.size() > 0 && data.message.size() < 5000 &&
+             data.type in ['improvement', 'complaint', 'other'] &&
+             isValidDateString(data.createdAt) &&
+             data.status in ['pending', 'reviewed'];
     }
 
     function isValidQuestion(data) {
@@ -240,6 +254,12 @@ service cloud.firestore {
       allow read: if isAuthorized() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthorized() && isValidTestSession(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if isAdmin();
+      allow create: if isAuthorized() && isValidFeedback(request.resource.data) && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     match /topic_resources/{resourceId} {

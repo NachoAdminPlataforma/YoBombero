@@ -5,6 +5,21 @@ export interface User {
   displayName: string;
   photoURL: string;
   permissions: string[];
+  gender?: 'Opositor' | 'Opositora';
+  oppositionType?: string;
+  onboardingCompleted?: boolean;
+}
+
+export interface Feedback {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  userPhoto?: string;
+  message: string;
+  type: 'improvement' | 'complaint' | 'other';
+  createdAt: string;
+  status: 'pending' | 'reviewed';
 }
 
 export interface Question {

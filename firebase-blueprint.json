@@ -27,9 +27,27 @@
         "role": { "type": "string", "enum": ["admin", "student"] },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
-        "permissions": { "type": "array", "items": { "type": "string" } }
+        "permissions": { "type": "array", "items": { "type": "string" } },
+        "gender": { "type": "string", "enum": ["Opositor", "Opositora"] },
+        "oppositionType": { "type": "string" },
+        "onboardingCompleted": { "type": "boolean" }
       },
       "required": ["email", "role"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "User feedback and suggestions",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["improvement", "complaint", "other"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "reviewed"] }
+      },
+      "required": ["userId", "userEmail", "userName", "message", "type", "createdAt", "status"]
     },
     "UserProgress": {
       "title": "UserProgress",
@@ -114,6 +132,10 @@
     "/topic_resources/{resourceId}": {
       "schema": "TopicResource",
       "description": "Topic resources"
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "User feedback"
     },
     "/metadata/counters": {
       "schema": {
