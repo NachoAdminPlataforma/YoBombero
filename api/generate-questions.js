@@ -96,24 +96,11 @@ export default async function handler(req, res) {
       config.tools = [{ urlContext: {} }];
     }
 
-    const modelToTry = 'gemini-3.1-pro-preview';
-    const fallbackModel = 'gemini-3-flash-preview';
+    const modelToTry = 'gemini-1.5-flash';
 
-    try {
-      const response = await ai.models.generateContent({ model: modelToTry, contents, config });
-      const textResponse = response.text || '[]';
-      return res.status(200).json(JSON.parse(textResponse));
-    } catch (error) {
-      console.warn(`Error with ${modelToTry}, trying fallback ${fallbackModel}:`, error);
-      try {
-        const response = await ai.models.generateContent({ model: fallbackModel, contents, config });
-        const textResponse = response.text || '[]';
-        return res.status(200).json(JSON.parse(textResponse));
-      } catch (fallbackError) {
-        console.error('Fallback AI Error:', fallbackError);
-        return res.status(500).json({ error: 'Error interno en la generación' });
-      }
-    }
+    const response = await ai.models.generateContent({ model: modelToTry, contents, config });
+    const textResponse = response.text || '[]';
+    return res.status(200).json(JSON.parse(textResponse));
   } catch (error) {
     console.error('Error en servidor:', error);
     return res.status(500).json({ error: 'Error interno en la generación' });
