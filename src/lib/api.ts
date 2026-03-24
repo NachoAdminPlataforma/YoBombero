@@ -1,5 +1,4 @@
 import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback, SurveyResponse } from '../types';
-import { GoogleGenAI, Type } from '@google/genai';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -555,48 +554,23 @@ export const api = {
   },
 
   async getMnemonic(question: string, correctAnswer: string): Promise<string> {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) return '';
-    const ai = new GoogleGenAI({ apiKey: apiKey as string });
-    
-    const prompt = `Crea una regla mnemotécnica o una historia corta, absurda y muy memorable para recordar este dato.
-      Pregunta: ${question}
-      Respuesta correcta: ${correctAnswer}
-      
-      IMPORTANTE: Si la respuesta contiene números (fechas, artículos, plazos, etc.), utiliza el SISTEMA NINJA de código fonético para crear la mnemotecnia:
-      0: R / RR
-      1: T, D
-      2: N, Ñ
-      3: M / W
-      4: C / K / Q
-      5: L / V / LL
-      6: S, Z
-      7: F / J
-      8: G / X / CH
-      9: P, B
-      (Las vocales, H e Y no tienen valor).
-      
-      Si usas el código fonético, explica brevemente la palabra elegida (ej: "Para el 10 usamos TORO (T=1, R=0)").
-      No des explicaciones adicionales innecesarias, solo la mnemotecnia o historia.`;
-
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
-        contents: prompt,
+      const response = await fetch('/api/get-mnemonic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, correctAnswer })
       });
-      return response.text || '';
-    } catch (error: any) {
-      console.warn("Mnemonic AI Error, trying fallback:", error);
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: prompt,
-        });
-        return response.text || '';
-      } catch (fallbackError: any) {
-        console.error("Fallback Mnemonic AI Error:", fallbackError);
-        return `Error al generar la regla mnemotécnica. Si es un error de cuota (Quota exceeded), la clave compartida de la plataforma puede haber alcanzado su límite. Inténtalo más tarde.`;
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Error al conectar con el servidor de mnemotécnicas: ${response.status} ${text}`);
       }
+
+      const result = await response.json();
+      return result.mnemonic;
+    } catch (error) {
+      console.error("Error generating mnemonic:", error);
+      return `Error al generar la regla mnemotécnica. Si es un error de cuota (Quota exceeded), la clave compartida de la plataforma puede haber alcanzado su límite. Inténtalo más tarde.`;
     }
   },
 
@@ -655,50 +629,19 @@ export const api = {
 
   async generatePhoneticWords(numberStr: string, letters: string): Promise<string[]> {
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey) return [];
-      const ai = new GoogleGenAI({ apiKey: apiKey as string });
-      const prompt = `Actúa como un experto en mnemotecnia. Para el número "${numberStr}", las opciones de consonantes por cada dígito en orden son: ${letters}. 
-Genera todas las palabras posibles en español (o una lista exhaustiva de hasta 30 palabras) que cumplan con este código.
-REGLA ESTRICTA: La palabra debe contener EXACTAMENTE las consonantes correspondientes a los dígitos en el orden exacto. Las vocales (a,e,i,o,u) y las letras H e Y no tienen valor y se usan para rellenar.
-Ejemplo: Para "10" (1=T/D, 0=R/RR) -> "Toro", "Torre", "Ateo", "Duro".
-Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
+      const response = await fetch('/api/generate-phonetic-words', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numberStr, letters })
+      });
 
-      const config: any = {
-        systemInstruction: "Eres un experto en mnemotecnia y lenguaje español. Genera siempre el texto en español correcto, utilizando tildes (á, é, í, ó, ú) y la letra ñ correctamente. Asegúrate de que la codificación de caracteres sea UTF-8.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.STRING
-          }
-        }
-      };
-
-      try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3.1-pro-preview",
-          contents: prompt,
-          config: config
-        });
-        const text = response.text || '[]';
-        const words = JSON.parse(text);
-        return Array.isArray(words) ? words : [];
-      } catch (error: any) {
-        console.warn("Phonetic AI Error, trying fallback:", error);
-        try {
-          const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: prompt,
-            config: config
-          });
-          const text = response.text || '[]';
-          const words = JSON.parse(text);
-          return Array.isArray(words) ? words : [];
-        } catch (e) {
-          return [];
-        }
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Error al conectar con el servidor de palabras fonéticas: ${response.status} ${text}`);
       }
+
+      const result = await response.json();
+      return result.words;
     } catch (error) {
       console.error("Error generating phonetic words:", error);
       return [];
@@ -706,23 +649,19 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
   },
 
   async generateAIContent(prompt: string): Promise<string> {
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey) throw new Error("API Key de Gemini no configurada");
-      const ai = new GoogleGenAI({ apiKey: apiKey as string });
-      
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          systemInstruction: "Eres un asistente experto en oposiciones y legislación. Genera siempre el texto en español correcto.",
-        }
-      });
-      return response.text || "";
-    } catch (error) {
-      console.error("Error generating AI content:", error);
-      throw error;
+    const response = await fetch('/api/generate-content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Error al conectar con el servidor de contenido: ${response.status} ${text}`);
     }
+
+    const result = await response.json();
+    return result.content;
   },
 
   // Topic Resources (PDFs)
