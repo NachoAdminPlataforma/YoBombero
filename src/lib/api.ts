@@ -402,135 +402,19 @@ export const api = {
   },
 
   async generateAIQuestions(data: any): Promise<Question[]> {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) throw new Error("API Key de Gemini no configurada");
-    const ai = new GoogleGenAI({ apiKey: apiKey as string });
-    
-    let urlContent = '';
-    if (data.url) {
-      try {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(data.url)}`;
-        const response = await fetch(proxyUrl);
-        if (response.ok) {
-          const result = await response.json();
-          urlContent = result.contents;
-        } else {
-          console.warn('Failed to fetch URL content via proxy');
-        }
-      } catch (e) {
-        console.error('Error fetching URL:', e);
-      }
+    const response = await fetch('/api/generate-questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Error al conectar con el servidor de preguntas: ${response.status} ${text}`);
     }
 
-    const existingQuestionsContext = data.existingQuestions && data.existingQuestions.length > 0
-      ? `\nPREGUNTAS YA EXISTENTES EN ESTE TEMA (PROHIBIDO REPETIR ESTOS CONCEPTOS O DATOS):\n${data.existingQuestions.map((q: any, i: number) => `${i+1}. Pregunta: ${q.text} | Respuesta Correcta: ${q.options[q.correctOptionIndex]}`).join('\n')}\n`
-      : '';
-
-    const promptText = `
-      Actúa como un experto creador y extractor de preguntas tipo test de alta dificultad.
-      
-      INSTRUCCIONES PRINCIPALES:
-      0. CORRECCIÓN DE ERRORES DE LECTURA (MUY IMPORTANTE): El texto fuente (especialmente si es un PDF) contiene errores de codificación donde las letras con tilde o la 'ñ' han sido reemplazadas por números (por ejemplo: '3' en lugar de 'ó', 'ú', 'í', 'é'; o '1' en lugar de 'á', 'ñ'). Ejemplos que encontrarás: "Funci3n p3blica" -> "Función pública", "Andaluc3a" -> "Andalucía", "tambi3n" -> "también", "car1cter" -> "carácter", "Se1ale" -> "Señale", "3rgano" -> "órgano", "opci3n" -> "opción", "tendr1n" -> "tendrán", "autom1tico" -> "automático". TU OBLIGACIÓN es corregir todos estos errores y devolver las preguntas y respuestas escritas en PERFECTO ESPAÑOL, con la ortografía correcta. NUNCA devuelvas palabras con números intercalados si se trata de un error ortográfico.
-
-      1. Si el contenido proporcionado (URL, HTML, texto o PDF) contiene un test, cuestionario o examen ya existente:
-         - TU TAREA ES EXTRAER TODAS esas preguntas exactamente como aparecen, PERO CORRIGIENDO LOS ERRORES DE CODIFICACIÓN MENCIONADOS EN EL PUNTO 0.
-         - Identifica la respuesta correcta. A menudo en el código HTML la respuesta correcta tiene una clase específica (como 'correct', 'right', 'verde', 'correcto'), un atributo de datos (como 'data-correct="true"'), o un script asociado. Si no puedes encontrar la marca técnica de la respuesta correcta, dedúcela usando tus conocimientos sobre el tema.
-         - Extrae TODAS las preguntas que encuentres en el contenido, sin importar el número. Ignora cualquier límite de cantidad. Es crucial que no te dejes ninguna pregunta del test original.
-      
-      2. Si el contenido es material de estudio (leyes, temarios, artículos) y NO contiene un test:
-         - Genera ${data.numQuestions} preguntas de opción múltiple nuevas basadas en el contenido.
-         - HAZ PREGUNTAS COMPLEJAS Y DIFÍCILES. Analiza el documento COMPLETO para buscar posibles datos confundibles, excepciones, plazos similares, o conceptos que se presten a confusión entre diferentes partes del texto.
-         - Formula preguntas que requieran relacionar conceptos de diferentes partes del documento, no solo copiar y pegar una frase.
-         - Las opciones incorrectas (distractores) deben ser muy plausibles y estar basadas en otros datos reales del documento para que el usuario tenga que pensar bien la respuesta.
-         - Asegúrate de que las preguntas sean claras y tengan una única respuesta correcta indiscutible.
-         
-         REGLA DE NO DUPLICIDAD:
-         - Revisa la lista de "PREGUNTAS YA EXISTENTES" proporcionada abajo.
-         - ESTÁ ESTRICTAMENTE PROHIBIDO generar preguntas que evalúen el mismo dato, artículo, plazo o concepto que ya esté cubierto por las preguntas existentes.
-         - Busca "huecos" en el temario: partes del texto que aún no han sido preguntadas.
-         - Si una pregunta existente ya pregunta por el plazo de un recurso, tú debes preguntar por otra cosa (quién lo resuelve, dónde se presenta, etc.), pero NO por el mismo plazo.
-         ${existingQuestionsContext}
-
-      Sección específica a evaluar/extraer: ${data.section || 'Todo el documento'}
-      Instrucciones adicionales: ${data.customPrompt || 'Ninguna'}
-      
-      URL proporcionada:
-      ${data.url || 'Ninguna'}
-
-      Contenido HTML de la URL (si aplica):
-      ${urlContent ? urlContent.substring(0, 500000) : 'Ninguno'}
-
-      Texto adicional proporcionado:
-      ${data.text || 'Ninguno'}
-    `;
-    
-    let contents: any = promptText;
-    if (data.fileData) {
-      contents = [
-        {
-          parts: [
-            { inlineData: { mimeType: data.fileData.mimeType, data: data.fileData.data } },
-            { text: promptText }
-          ]
-        }
-      ];
-    }
-    
-    const config: any = {
-      responseMimeType: "application/json",
-      systemInstruction: "Eres un experto en legislación española. Genera siempre el texto en español correcto, utilizando tildes (á, é, í, ó, ú) y la letra ñ correctamente. Corrige automáticamente cualquier error de codificación del texto original donde las tildes o la 'ñ' aparezcan como números (ej. 'Funci3n' -> 'Función', 'car1cter' -> 'carácter', 'tambi3n' -> 'también'). Asegúrate de que la codificación de caracteres sea UTF-8 y no utilices códigos numéricos para representar caracteres especiales.",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            text: { type: Type.STRING, description: "Texto de la pregunta" },
-            options: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "Lista de 4 opciones de respuesta"
-            },
-            correctOptionIndex: { type: Type.INTEGER, description: "Índice (0-3) de la opción correcta" }
-          },
-          required: ["text", "options", "correctOptionIndex"]
-        }
-      }
-    };
-
-    // We no longer strictly need urlContext if we are passing the HTML directly, 
-    // but we can keep it as a fallback for the model.
-    if (data.url && !urlContent) {
-      config.tools = [{ urlContext: {} }];
-    }
-    
-    const modelToTry = 'gemini-3.1-pro-preview';
-    const fallbackModel = 'gemini-3-flash-preview';
-    
-    try {
-      const response = await ai.models.generateContent({
-        model: modelToTry,
-        contents: contents,
-        config: config
-      });
-      
-      const textResponse = response.text || '[]';
-      return parseAIResponse(textResponse);
-    } catch (error: any) {
-      console.warn(`Error with ${modelToTry}, trying fallback ${fallbackModel}:`, error);
-      
-      try {
-        const response = await ai.models.generateContent({
-          model: fallbackModel,
-          contents: contents,
-          config: config
-        });
-        const textResponse = response.text || '[]';
-        return parseAIResponse(textResponse);
-      } catch (fallbackError: any) {
-        console.error("Fallback AI Error:", fallbackError);
-        throw new Error(`Error de la IA: ${fallbackError.message || 'Desconocido'}. Si es un error de cuota (Quota exceeded), ten en cuenta que la clave de prueba compartida de la plataforma puede haber alcanzado su límite global. Inténtalo de nuevo más tarde.`);
-      }
-    }
+    const result = await response.json();
+    return result as Question[];
   },
 
   async saveBulkQuestions(userId: string, questions: any[], classification: string, topic: string, sourcePdf?: string): Promise<{ questions: Question[] }> {
