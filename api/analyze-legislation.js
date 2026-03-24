@@ -1,5 +1,5 @@
 // api/analyze-legislation.js
-import { GoogleGenAI } from '@google/genai';
+import { getGeminiClient } from './gemini-client.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -7,14 +7,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'API Key de Gemini no configurada' });
-    }
-
+    const ai = getGeminiClient();
     const data = req.body;
-
-    const ai = new GoogleGenAI({ apiKey });
 
     const systemInstruction = `Actúa como un/a experto/a en comprensión, análisis y didáctica de textos. Eres un experto en legislación española. Genera siempre el texto en español correcto, utilizando tildes (á, é, í, ó, ú) y la letra ñ correctamente. Asegúrate de que la codificación de caracteres sea UTF-8 y no utilices códigos numéricos para representar caracteres especiales.
 
@@ -82,7 +76,15 @@ Formato de salida obligatorio:
 
     return res.status(200).json({ result: response.text || "No se pudo generar el análisis." });
   } catch (error) {
-    console.error('Error en servidor:', error);
-    return res.status(500).json({ error: 'Error interno en el análisis' });
+    console.error('Error en servidor (analyze-legislation):', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    
+    if (errorMessage.includes('API key not valid')) {
+      return res.status(401).json({ 
+        error: 'La clave de API de Gemini no es válida o no tiene habilitada la "Generative Language API". Por favor, verifica tu configuración en Google Cloud Console.' 
+      });
+    }
+    
+    return res.status(500).json({ error: `Error interno en el análisis: ${errorMessage}` });
   }
 }

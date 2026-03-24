@@ -1,5 +1,5 @@
 // api/get-mnemonic.js
-import { GoogleGenAI } from '@google/genai';
+import { getGeminiClient } from './gemini-client.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -7,17 +7,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'API Key de Gemini no configurada' });
-    }
-
+    const ai = getGeminiClient();
     const { question, correctAnswer } = req.body;
-    if (!question || !correctAnswer) {
-      return res.status(400).json({ error: 'Pregunta y respuesta correcta requeridas' });
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `Crea una regla mnemotécnica o una historia corta, absurda y muy memorable para recordar este dato.
       Pregunta: ${question}
@@ -46,7 +37,15 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ mnemonic: response.text || '' });
   } catch (error) {
-    console.error('Error en servidor:', error);
-    return res.status(500).json({ error: 'Error interno en la generación de mnemotécnica' });
+    console.error('Error en servidor (get-mnemonic):', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    
+    if (errorMessage.includes('API key not valid')) {
+      return res.status(401).json({ 
+        error: 'La clave de API de Gemini no es válida o no tiene habilitada la "Generative Language API". Por favor, verifica tu configuración en Google Cloud Console.' 
+      });
+    }
+    
+    return res.status(500).json({ error: `Error interno en la generación de mnemotécnica: ${errorMessage}` });
   }
 }
