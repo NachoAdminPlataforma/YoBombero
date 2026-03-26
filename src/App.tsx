@@ -19,8 +19,6 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentSessionId] = useState(() => Math.random().toString(36).substring(2, 15));
-  const [sessionConflict, setSessionConflict] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'test' | 'database' | 'history' | 'shortcuts' | 'admin' | 'feedback'>('dashboard');
   const [testQuestions, setTestQuestions] = useState<Question[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -32,11 +30,10 @@ export default function App() {
     return false;
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const [localSessionId] = useState(() => Math.random().toString(36).substring(2, 15));
+  const [sessionConflict, setSessionConflict] = useState(false);
 
   useEffect(() => {
-    let sessionUnsubscribe: (() => void) | null = null;
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
@@ -46,10 +43,18 @@ export default function App() {
           
           if (userSnap.exists()) {
             const userData = userSnap.data() as AppUser;
-            setAppUser(userData);
             
-            // Update session ID
-            await updateDoc(userRef, { sessionId: currentSessionId });
+            // Only enforce single session for non-admins
+            if (userData.role !== 'admin') {
+              try {
+                await updateDoc(userRef, { sessionId: localSessionId });
+                userData.sessionId = localSessionId;
+              } catch (error) {
+                console.error("Error updating session ID:", error);
+              }
+            }
+            
+            setAppUser(userData);
           } else {
             // New user
             const isDefaultAdmin = firebaseUser.email === 'nachotestprueba@gmail.com';
@@ -60,40 +65,45 @@ export default function App() {
               displayName: firebaseUser.displayName || '',
               photoURL: firebaseUser.photoURL || '',
               permissions: [],
-              sessionId: currentSessionId
             };
+            
+            if (!isDefaultAdmin) {
+              newUser.sessionId = localSessionId;
+            }
+            
             await setDoc(userRef, newUser);
             setAppUser(newUser);
           }
-
-          // Listen for session changes
-          sessionUnsubscribe = onSnapshot(userRef, (doc) => {
-            if (doc.exists()) {
-              const data = doc.data();
-              // Only enforce single session for non-admin users
-              if (data.role !== 'admin' && data.sessionId && data.sessionId !== currentSessionId) {
-                setSessionConflict(true);
-              }
-            }
-          });
         } catch (error) {
           console.error("Error initializing user profile:", error);
         }
       } else {
         setAppUser(null);
-        if (sessionUnsubscribe) {
-          sessionUnsubscribe();
-          sessionUnsubscribe = null;
-        }
+        // Do not reset sessionConflict here so the user can see the conflict screen
       }
       setLoading(false);
     });
 
-    return () => {
-      unsubscribe();
-      if (sessionUnsubscribe) sessionUnsubscribe();
-    };
-  }, [currentSessionId]);
+    return () => unsubscribe();
+  }, [localSessionId]);
+
+  // Listen for session conflicts
+  useEffect(() => {
+    if (!user || !appUser || appUser.role === 'admin') return;
+
+    const userRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as AppUser;
+        if (data.sessionId && data.sessionId !== localSessionId) {
+          setSessionConflict(true);
+          handleLogout();
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, appUser, localSessionId]);
 
   useEffect(() => {
     console.log('Dark mode changed:', isDarkMode);
@@ -120,24 +130,31 @@ export default function App() {
   };
 
   const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      // Forzar la selección de cuenta puede ayudar a limpiar estados cacheados inválidos
-      provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
-      setLoginError(null);
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-        // User closed the popup or cancelled the request, no need to log as error
-        return;
+      if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+        console.log("Login cancelled by user.");
+      } else {
+        console.error("Login error:", error);
       }
-      console.error("Login error:", error);
-      setLoginError("Error al iniciar sesión. Verifica la configuración de Firebase.");
     }
   };
 
   const handleLogout = async () => {
     try {
+      if (user && appUser && appUser.role !== 'admin') {
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const data = userSnap.data() as AppUser;
+          // Only clear the session ID if it belongs to this device
+          if (data.sessionId === localSessionId) {
+            await updateDoc(userRef, { sessionId: null });
+          }
+        }
+      }
       await signOut(auth);
     } catch (error) {
       console.error("Logout error:", error);
@@ -168,80 +185,66 @@ export default function App() {
     return (
       <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6 ${isDarkMode ? 'dark' : ''}`}>
         <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 text-center border border-slate-200 dark:border-slate-700">
-          <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Zap size={40} />
+          <div className="w-20 h-20 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Shield size={40} className="text-rose-600 dark:text-rose-400" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Sesión Cerrada</h1>
           <p className="text-slate-600 dark:text-slate-400 mb-8">
-            Se ha iniciado sesión con esta cuenta en otro dispositivo. Por seguridad, esta sesión se ha cerrado.
+            Se ha iniciado sesión en otro dispositivo o pestaña. Por seguridad, solo puedes tener una sesión activa a la vez.
           </p>
           <button 
-            onClick={handleLogout}
+            onClick={() => window.location.reload()}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-all"
           >
-            Volver al Inicio
+            <LogIn size={18} />
+            Volver a Iniciar Sesión
           </button>
         </div>
       </div>
     );
   }
 
-  if (!user) {
+  if (!user || !appUser) {
     return (
       <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6 ${isDarkMode ? 'dark' : ''}`}>
-        <div className="max-w-md w-full">
-          <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl p-10 text-center border border-slate-200 dark:border-slate-700 relative overflow-hidden">
-            {/* Background decorative elements */}
-            <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
-            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
-            
-            <div className="relative">
-              <div className="w-24 h-24 bg-indigo-600 dark:bg-indigo-500 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-200 dark:shadow-none transform -rotate-6">
-                <BookOpen size={48} />
-              </div>
-              
-              <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-3 tracking-tight">
-                Mi Plataforma <span className="text-indigo-600 dark:text-indigo-400">Test</span> 📚
-              </h1>
-              <p className="text-lg text-slate-600 dark:text-slate-400 mb-10 font-medium">
-                La herramienta definitiva para opositores de élite.
-              </p>
-              
-              <div className="space-y-4">
-                {loginError && (
-                  <div className="p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-medium animate-in fade-in duration-300">
-                    {loginError}
-                  </div>
-                )}
-                <button 
-                  onClick={handleLogin}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-indigo-200 dark:shadow-none"
-                >
-                  <LogIn size={24} />
-                  Entrar con Google
-                </button>
-                
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 px-4">
-                  Al iniciar sesión, aceptas nuestras <span className="underline cursor-pointer hover:text-indigo-500">Condiciones de Uso</span> y <span className="underline cursor-pointer hover:text-indigo-500">Política de Privacidad</span>.
-                </p>
-              </div>
+        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 text-center border border-slate-200 dark:border-slate-700 relative overflow-hidden">
+          {/* Decorative background elements */}
+          <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-indigo-50 to-transparent dark:from-indigo-900/20 dark:to-transparent -z-10"></div>
+          
+          <div className="absolute top-4 right-4">
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full transition-colors shadow-sm"
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+          </div>
 
-              <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-700 flex items-center justify-center gap-6">
-                <button 
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                >
-                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-                  {isDarkMode ? "Modo Claro" : "Modo Oscuro"}
-                </button>
-              </div>
-            </div>
+          <div className="w-24 h-24 bg-gradient-to-tr from-indigo-600 to-purple-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-200 dark:shadow-none transform -rotate-3">
+            <BookOpen size={48} className="transform rotate-3" />
           </div>
           
-          <div className="mt-8 text-center">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              ¿No tienes acceso? Contacta con tu tutor para solicitarlo.
-            </p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight">Mi Plataforma Test</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-10 text-sm px-4">
+            Tu espacio personal para preparar oposiciones. Inicia sesión para continuar tu progreso.
+          </p>
+          
+          <button 
+            onClick={handleLogin}
+            className="w-full bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-white font-semibold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all transform hover:-translate-y-1 shadow-lg border border-slate-200 dark:border-slate-600"
+          >
+            <svg className="w-6 h-6" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 15.02 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+            Continuar con Google
+          </button>
+
+          <div className="mt-8 text-xs text-slate-400 dark:text-slate-500">
+            Al iniciar sesión, aceptas nuestras <br/>
+            <a href="#" className="text-indigo-600 dark:text-indigo-400 hover:underline">Condiciones de Uso</a> y <a href="#" className="text-indigo-600 dark:text-indigo-400 hover:underline">Política de Privacidad</a>
           </div>
         </div>
       </div>

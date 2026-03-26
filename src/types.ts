@@ -55,17 +55,7 @@ export interface Question {
 export interface SavedPrompt {
   id: string;
   title: string;
-  userId: string;
-  isAdminPrompt: boolean;
-  topic?: string;
-  createdAt: string;
-}
-
-export interface PromptContent {
-  id: string;
-  content: string;
-  userId: string;
-  isAdminPrompt: boolean;
+  prompt: string;
 }
 
 export interface ReviewHistory {

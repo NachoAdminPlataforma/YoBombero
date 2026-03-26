@@ -140,7 +140,8 @@ service cloud.firestore {
              (!('permissions' in data) || data.permissions is list) &&
              (!('gender' in data) || data.gender in ['Opositor', 'Opositora']) &&
              (!('oppositionType' in data) || data.oppositionType is string) &&
-             (!('onboardingCompleted' in data) || data.onboardingCompleted is bool);
+             (!('onboardingCompleted' in data) || data.onboardingCompleted is bool) &&
+             (!('sessionId' in data) || data.sessionId is string || data.sessionId == null);
     }
 
     function isValidFeedback(data) {
@@ -216,9 +217,7 @@ service cloud.firestore {
                       (isOwner(userId) || isAdmin()) &&
                       (request.resource.data.role == 'pending' || isAdmin());
       allow update: if isAuthenticated() && isValidUser(request.resource.data) &&
-                      (isAdmin() || (isOwner(userId) && 
-                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'email'])
-                      ));
+                      (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
       allow delete: if isAdmin();
     }
 
@@ -288,33 +287,8 @@ service cloud.firestore {
     }
 
     match /saved_prompts/{promptId} {
-      allow read: if isAuthorized() && (
-        isOwner(resource.data.userId) || 
-        (resource.data.isAdminPrompt == true && (!('topic' in resource.data) || hasTopicPermission(resource.data.topic)))
-      );
-      allow create: if isAuthorized() && (
-        (request.resource.data.userId == request.auth.uid && request.resource.data.isAdminPrompt == false) ||
-        isAdmin()
-      );
-      allow update, delete: if isAuthorized() && (
-        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) ||
-        isAdmin()
-      );
-    }
-
-    match /prompt_contents/{promptId} {
-      allow read: if isAuthorized() && (
-        isOwner(resource.data.userId) || 
-        (resource.data.isAdminPrompt == true && isAdmin())
-      );
-      allow create: if isAuthorized() && (
-        (request.resource.data.userId == request.auth.uid && request.resource.data.isAdminPrompt == false) ||
-        isAdmin()
-      );
-      allow update, delete: if isAuthorized() && (
-        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) ||
-        isAdmin()
-      );
+      allow read: if isAuthorized() && (!('topic' in resource.data) || hasTopicPermission(resource.data.topic));
+      allow write: if isAdmin();
     }
 
     // Default deny
