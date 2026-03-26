@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { api } from '../lib/api';
+import { GoogleGenAI } from "@google/genai";
+import { api, getGeminiApiKey } from '../lib/api';
 import { playNotificationSound } from '../lib/audio';
 import { FileText, Upload, Loader2, File as FileIcon, X, Folder } from 'lucide-react';
 import Markdown from 'react-markdown';
@@ -81,40 +82,104 @@ export function LegislationAnalyzer({ userId, userRole, permissions }: Legislati
       setError("Por favor, introduce texto, adjunta un archivo o usa el PDF del tema.");
       return;
     }
-
+    
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const requestData: any = {
-        text: text.trim(),
-        fileContext: fileContext.trim(),
-        useAttachedPdf,
-        attachedPdf
-      };
+      const apiKey = getGeminiApiKey();
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const systemInstruction = `Actúa como un/a experto/a en comprensión, análisis y didáctica de textos. Eres un experto en legislación española. Genera siempre el texto en español correcto, utilizando tildes (á, é, í, ó, ú) y la letra ñ correctamente. Asegúrate de que la codificación de caracteres sea UTF-8 y no utilices códigos numéricos para representar caracteres especiales.
 
-      if (file) {
+Sobre el artículo ${fileContext.trim() ? `"${fileContext.trim()}"` : 'proporcionado'}
+
+Debes realizar todas las tareas que se indican a continuación sin omitir información relevante del texto original pero todo de manera simple y entendible, sin relleno:
+
+1. Reescritura con lenguaje mucho más entendible
+
+- Reescribe el contenido del artículo utilizando un lenguaje claro, sencillo y accesible.
+- Mantén el significado original, pero elimina tecnicismos innecesarios o explícalos de forma simple.
+
+2. Analogía del contenido del artículo (CONTEXTO OPOSICIÓN BOMBERO)
+
+- Explica las ideas principales del artículo mediante una analogía fácil de comprender.
+- IMPORTANTE: La analogía DEBE estar ambientada en el entorno de una opositora a BOMBERO. Utiliza ejemplos relacionados con tus profesores de legislación, tu profesor de bombero, situaciones en el parque de bomberos, o la vida cotidiana de un opositor.
+- La analogía debe ser coherente y ayudar a entender el mensaje central del texto.
+
+3. Caso de aplicación práctica (AYUNTAMIENTO DE SEVILLA / BOMBEROS)
+
+- Describe uno o más ejemplos prácticos de cómo se aplica lo explicado en el artículo en situaciones reales relacionadas con el AYUNTAMIENTO DE SEVILLA (donde vas a trabajar) o con la profesión de BOMBERO.
+- Los ejemplos deben ser concretos, realistas y directamente relacionados con el ámbito de los bomberos o la administración local de Sevilla.
+
+4. Conversión del artículo en afirmaciones tipo test
+
+- Transforma el artículo en una serie de afirmaciones claras, precisas y organizadas.
+- Las afirmaciones deben estar optimizadas para responder preguntas tipo test.
+- El resultado debe ser completo, estructurado y sin omitir información, de modo que se pueda responder correctamente cualquier pregunta tipo test basada en el documento original.
+
+Formato de salida obligatorio:
+
+- Usa títulos numerados para cada apartado (ej. "## 1. Reescritura con lenguaje mucho más entendible").
+- Usa formato Markdown para estructurar bien el texto (negritas, listas, saltos de línea).
+- No mezcles información entre secciones.
+- No inventes datos que no estén en el artículo.`;
+
+      const parts: any[] = [];
+      
+      if (text.trim()) {
+        parts.push({ text: text });
+      }
+
+      if (useAttachedPdf && attachedPdf) {
+        parts.push({ text: `CONTENIDO DEL PDF ADJUNTO AL TEMA (${attachedPdf.fileName}):\n${attachedPdf.extractedText}` });
+      } else if (file) {
         const base64Data = await fileToBase64(file);
-        requestData.fileData = {
-          data: base64Data,
-          mimeType: file.type
-        };
+        parts.push({
+          inlineData: {
+            data: base64Data,
+            mimeType: file.type
+          }
+        });
       }
 
-      const response = await fetch('/api/analyze-legislation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Error al conectar con el servidor de análisis: ${response.status} ${text}`);
+      if (fileContext.trim()) {
+        parts.push({ text: `Por favor, centra tu análisis específicamente en la siguiente parte, artículo o sección del documento o texto proporcionado: ${fileContext.trim()}` });
       }
 
-      const resultData = await response.json();
-      setResult(resultData.result);
+      const modelToTry = 'gemini-3.1-pro-preview';
+      const fallbackModel = 'gemini-3-flash-preview';
+
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: modelToTry,
+          contents: {
+            parts: parts,
+          },
+          config: {
+            systemInstruction: systemInstruction,
+          },
+        });
+      } catch (error: any) {
+        console.warn(`Error with ${modelToTry}, trying fallback ${fallbackModel}:`, error);
+        if (error.message?.includes('Rpc failed') || error.message?.includes('xhr error') || error.status === 'UNKNOWN' || error.message?.toLowerCase().includes('quota') || error.message?.toLowerCase().includes('limit') || error.message?.includes('429')) {
+          response = await ai.models.generateContent({
+            model: fallbackModel,
+            contents: {
+              parts: parts,
+            },
+            config: {
+              systemInstruction: systemInstruction,
+            },
+          });
+        } else {
+          throw error;
+        }
+      }
+
+      setResult(response.text || "No se pudo generar el análisis.");
       playNotificationSound();
     } catch (err: any) {
       console.error("Error analyzing text:", err);
