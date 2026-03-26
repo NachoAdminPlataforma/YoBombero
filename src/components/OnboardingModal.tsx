@@ -21,16 +21,18 @@ const OPPOSITION_OPTIONS = [
 export function OnboardingModal({ user, onComplete }: OnboardingModalProps) {
   const [step, setStep] = useState(1);
   const [displayName, setDisplayName] = useState(user.displayName?.split(' ')[0] || '');
+  const [platformName, setPlatformName] = useState('Mi Plataforma Test');
   const [gender, setGender] = useState<'Opositor' | 'Opositora' | null>(user.gender || null);
   const [oppositionType, setOppositionType] = useState<string | null>(user.oppositionType || null);
   const [loading, setLoading] = useState(false);
 
   const handleComplete = async () => {
-    if (!gender || !oppositionType || !displayName.trim()) return;
+    if (!gender || !oppositionType || !displayName.trim() || !platformName.trim()) return;
     setLoading(true);
     try {
       const updates = {
         displayName: displayName.trim(),
+        platformName: platformName.trim(),
         gender,
         oppositionType,
         onboardingCompleted: true,
@@ -55,6 +57,38 @@ export function OnboardingModal({ user, onComplete }: OnboardingModalProps) {
                 <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <UserIcon size={32} />
                 </div>
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Nombra tu plataforma</h2>
+                <p className="text-slate-600 dark:text-slate-400">Personaliza el nombre que verás en la parte superior.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Nombre de la plataforma</label>
+                <input
+                  type="text"
+                  value={platformName}
+                  onChange={(e) => setPlatformName(e.target.value)}
+                  placeholder="Ej: Mi Academia, Mi Espacio..."
+                  className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-2xl focus:border-indigo-500 outline-none text-slate-900 dark:text-white font-medium transition-all"
+                  autoFocus
+                />
+              </div>
+
+              <button
+                disabled={!platformName.trim()}
+                onClick={() => setStep(2)}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
+              >
+                Siguiente <ArrowRight size={20} />
+              </button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <UserIcon size={32} />
+                </div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">¿Cómo te llamas?</h2>
                 <p className="text-slate-600 dark:text-slate-400">Queremos saber cómo dirigirte a ti en la plataforma.</p>
               </div>
@@ -71,17 +105,25 @@ export function OnboardingModal({ user, onComplete }: OnboardingModalProps) {
                 />
               </div>
 
-              <button
-                disabled={!displayName.trim()}
-                onClick={() => setStep(2)}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
-              >
-                Siguiente <ArrowRight size={20} />
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(1)}
+                  className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold py-4 rounded-2xl transition-all"
+                >
+                  Atrás
+                </button>
+                <button
+                  disabled={!displayName.trim()}
+                  onClick={() => setStep(3)}
+                  className="flex-[2] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
+                >
+                  Siguiente <ArrowRight size={20} />
+                </button>
+              </div>
             </div>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="text-center">
                 <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -118,14 +160,14 @@ export function OnboardingModal({ user, onComplete }: OnboardingModalProps) {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setStep(1)}
+                  onClick={() => setStep(2)}
                   className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold py-4 rounded-2xl transition-all"
                 >
                   Atrás
                 </button>
                 <button
                   disabled={!gender}
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                   className="flex-[2] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all"
                 >
                   Siguiente <ArrowRight size={20} />
@@ -134,7 +176,7 @@ export function OnboardingModal({ user, onComplete }: OnboardingModalProps) {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="text-center">
                 <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4">

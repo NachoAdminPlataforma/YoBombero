@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Question } from '../types';
-import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
 import { KnowledgeHeatmap } from './KnowledgeHeatmap';
 import { InfoTooltip } from './InfoTooltip';
 import { User as AppUser } from '../types';
@@ -158,7 +158,6 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-            <Sparkles className="text-indigo-500" size={28} />
             {getWelcomeMessage()}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">Tu camino hacia la plaza continúa aquí.</p>

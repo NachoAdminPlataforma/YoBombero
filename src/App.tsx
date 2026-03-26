@@ -228,7 +228,9 @@ export default function App() {
             <BookOpen size={48} className="transform rotate-3" />
           </div>
           
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight">Mi Plataforma Test</h1>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight">
+            {appUser?.platformName || 'Mi Plataforma Test'} {appUser ? getOppositionEmoji(appUser.oppositionType) : ''}
+          </h1>
           <p className="text-slate-500 dark:text-slate-400 mb-10 text-sm px-4">
             Tu espacio personal para preparar oposiciones. Inicia sesión para continuar tu progreso.
           </p>
@@ -298,11 +300,11 @@ export default function App() {
             <Clock size={40} />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-            ¡Hola, {firstName}! {emoji}
+            {appUser.platformName || 'Mi Plataforma Test'} {emoji}
           </h1>
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-4">Acceso Pendiente</h2>
           <p className="text-slate-600 dark:text-slate-400 mb-8">
-            Tu perfil ha sido configurado correctamente. El administrador te dará acceso dentro de poco para que puedas empezar a estudiar.
+            ¡Hola, {firstName}! Tu perfil ha sido configurado correctamente. El administrador te dará acceso dentro de poco para que puedas empezar a estudiar.
           </p>
           <div className="space-y-4">
             <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400">
@@ -340,14 +342,8 @@ export default function App() {
           <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30">
             <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
               <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xl tracking-tight cursor-pointer" onClick={() => setCurrentView('dashboard')}>
-                <BookOpen size={24} />
                 <span className="truncate">
-                  Mi Plataforma Test {appUser?.oppositionType === 'bombero' ? '🚒' : 
-                                    appUser?.oppositionType === 'policia' ? '👮' : 
-                                    appUser?.oppositionType === 'guardia_civil' ? '🚔' : 
-                                    appUser?.oppositionType === 'justicia' ? '⚖️' : 
-                                    appUser?.oppositionType === 'administrativo' ? '📂' : 
-                                    appUser?.oppositionType === 'sanitario' ? '🏥' : '📚'}
+                  {appUser?.platformName || 'Mi Plataforma Test'} {getOppositionEmoji(appUser?.oppositionType)}
                 </span>
               </div>
               

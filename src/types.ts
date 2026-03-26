@@ -7,6 +7,7 @@ export interface User {
   permissions: string[];
   gender?: 'Opositor' | 'Opositora';
   oppositionType?: string;
+  platformName?: string;
   onboardingCompleted?: boolean;
   sessionId?: string;
   tutorialsCompleted?: Record<string, boolean>;

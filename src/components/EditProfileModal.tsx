@@ -13,6 +13,7 @@ interface EditProfileModalProps {
 
 export function EditProfileModal({ user, onClose, onComplete }: EditProfileModalProps) {
   const [displayName, setDisplayName] = useState(user.displayName || '');
+  const [platformName, setPlatformName] = useState(user.platformName || 'Mi Plataforma Test');
   const [photoURL, setPhotoURL] = useState(user.photoURL || '');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -100,7 +101,7 @@ export function EditProfileModal({ user, onClose, onComplete }: EditProfileModal
   };
 
   const handleSave = async () => {
-    if (!displayName.trim()) return;
+    if (!displayName.trim() || !platformName.trim()) return;
     setLoading(true);
     try {
       // Ensure we have a valid photoURL (either the new one or the existing one)
@@ -108,6 +109,7 @@ export function EditProfileModal({ user, onClose, onComplete }: EditProfileModal
       
       const updates = {
         displayName: displayName.trim(),
+        platformName: platformName.trim(),
         photoURL: finalPhotoURL,
       };
       
@@ -179,20 +181,33 @@ export function EditProfileModal({ user, onClose, onComplete }: EditProfileModal
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Tu nombre (o apodo)</label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Ej: Juan"
-              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white font-medium"
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Tu nombre (o apodo)</label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Ej: Juan"
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white font-medium"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Nombre de la plataforma</label>
+              <input
+                type="text"
+                value={platformName}
+                onChange={(e) => setPlatformName(e.target.value)}
+                placeholder="Ej: Mi Plataforma"
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white font-medium"
+              />
+            </div>
           </div>
 
           <button
             onClick={handleSave}
-            disabled={!displayName.trim() || loading || uploading}
+            disabled={!displayName.trim() || !platformName.trim() || loading || uploading}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
           >
             {loading ? (

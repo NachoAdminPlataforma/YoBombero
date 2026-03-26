@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { Question, ReviewHistory } from '../types';
-import { Folder, ChevronRight, ChevronLeft, Edit2, Trash2, Clock, CheckCircle2, XCircle, ArrowLeft, Save, X, Search, Database, FileText, Star, MessageSquare, AlertTriangle, ListFilter, LayoutGrid, Move, Upload, File as FileIcon, Loader2 } from 'lucide-react';
+import { Folder, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Edit2, Trash2, Clock, CheckCircle2, XCircle, ArrowLeft, Save, X, Search, Database, FileText, Star, MessageSquare, AlertTriangle, ListFilter, LayoutGrid, Move, Upload, File as FileIcon, Loader2 } from 'lucide-react';
 import { QuestionDetailsModal } from './QuestionDetailsModal';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -241,6 +241,7 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
   const [searchText, setSearchText] = useState('');
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
   const [topicSort, setTopicSort] = useState<'default' | 'newest' | 'oldest'>('default');
+  const [isRecentExpanded, setIsRecentExpanded] = useState(true);
 
   useEffect(() => {
   }, [currentPath, searchId, searchText, topicSort]);
@@ -725,36 +726,46 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
 
           {recentQuestions.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <button 
+                onClick={() => setIsRecentExpanded(!isRecentExpanded)}
+                className="flex items-center justify-between w-full group"
+              >
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <Clock className="text-indigo-600 dark:text-indigo-400" size={20} />
                   Últimas preguntas añadidas
                 </h3>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {recentQuestions.map(q => (
-                  <div 
-                    key={q.id} 
-                    onClick={() => openQuestionDetails(q)}
-                    onTouchStart={(e) => handleTouchStart(e, q.id)}
-                    className={`p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-sm transition-all cursor-pointer flex items-center justify-between group`}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800 uppercase tracking-tighter">ID: {q.displayId}</span>
-                        <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{q.classification} / {q.topic}</span>
-                        {q.createdAt && (
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                            {new Date(q.createdAt).toLocaleDateString()} {new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
+                <div className="flex items-center gap-2 text-slate-400 group-hover:text-indigo-500 transition-colors">
+                  <span className="text-xs font-medium">{isRecentExpanded ? 'Ocultar' : 'Mostrar'}</span>
+                  {isRecentExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </div>
+              </button>
+              
+              {isRecentExpanded && (
+                <div className="grid grid-cols-1 gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  {recentQuestions.map(q => (
+                    <div 
+                      key={q.id} 
+                      onClick={() => openQuestionDetails(q)}
+                      onTouchStart={(e) => handleTouchStart(e, q.id)}
+                      className={`p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-sm transition-all cursor-pointer flex items-center justify-between group`}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800 uppercase tracking-tighter">ID: {q.displayId}</span>
+                          <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{q.classification} / {q.topic}</span>
+                          {q.createdAt && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                              {new Date(q.createdAt).toLocaleDateString()} {new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-slate-700 dark:text-slate-200 line-clamp-1 text-sm font-medium">{q.text}</p>
                       </div>
-                      <p className="text-slate-700 dark:text-slate-200 line-clamp-1 text-sm font-medium">{q.text}</p>
+                      <ChevronRight className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-400 transition-colors" size={20} />
                     </div>
-                    <ChevronRight className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-400 transition-colors" size={20} />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
