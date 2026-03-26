@@ -300,6 +300,7 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
       }
     }
   } catch (error: any) {
+    console.error("Error in /api/generate-phonetic:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -318,6 +319,7 @@ app.post('/api/generate-content', async (req, res) => {
     });
     res.json({ text: response.text || "" });
   } catch (error: any) {
+    console.error("Error in /api/generate-content:", error);
     res.status(500).json({ error: error.message });
   }
 });
