@@ -19,16 +19,7 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentSessionId] = useState(() => {
-    // We use localStorage to allow multiple tabs in the same browser 
-    // but prevent different browsers or devices from sharing the same account.
-    let sid = localStorage.getItem('app_session_id');
-    if (!sid) {
-      sid = Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('app_session_id', sid);
-    }
-    return sid;
-  });
+  const [currentSessionId] = useState(() => Math.random().toString(36).substring(2, 15));
   const [sessionConflict, setSessionConflict] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'test' | 'database' | 'history' | 'shortcuts' | 'admin' | 'feedback'>('dashboard');
   const [testQuestions, setTestQuestions] = useState<Question[]>([]);
@@ -41,6 +32,7 @@ export default function App() {
     return false;
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     let sessionUnsubscribe: (() => void) | null = null;
@@ -78,7 +70,8 @@ export default function App() {
           sessionUnsubscribe = onSnapshot(userRef, (doc) => {
             if (doc.exists()) {
               const data = doc.data();
-              if (data.sessionId && data.sessionId !== currentSessionId) {
+              // Only enforce single session for non-admin users
+              if (data.role !== 'admin' && data.sessionId && data.sessionId !== currentSessionId) {
                 setSessionConflict(true);
               }
             }
@@ -127,11 +120,19 @@ export default function App() {
   };
 
   const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
     try {
+      const provider = new GoogleAuthProvider();
+      // Forzar la selección de cuenta puede ayudar a limpiar estados cacheados inválidos
+      provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
-    } catch (error) {
+      setLoginError(null);
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+        // User closed the popup or cancelled the request, no need to log as error
+        return;
+      }
       console.error("Login error:", error);
+      setLoginError("Error al iniciar sesión. Verifica la configuración de Firebase.");
     }
   };
 
@@ -207,6 +208,11 @@ export default function App() {
               </p>
               
               <div className="space-y-4">
+                {loginError && (
+                  <div className="p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-medium animate-in fade-in duration-300">
+                    {loginError}
+                  </div>
+                )}
                 <button 
                   onClick={handleLogin}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-indigo-200 dark:shadow-none"
