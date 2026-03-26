@@ -26,17 +26,22 @@ export function KnowledgeHeatmap({ userId, userRole, permissions }: KnowledgeHea
     const processData = () => {
       if (!questionsLoaded || !sessionsLoaded || !progressLoaded) return;
 
-      const topicStats: Record<string, { totalMastery: number; totalQuestions: number }> = {};
+      const topicStats: Record<string, { totalMastery: number; totalQuestions: number; attemptedQuestions: number }> = {};
       
       questionsData.forEach(q => {
         const topic = q.topic || 'Sin clasificar';
         if (!topicStats[topic]) {
-          topicStats[topic] = { totalMastery: 0, totalQuestions: 0 };
+          topicStats[topic] = { totalMastery: 0, totalQuestions: 0, attemptedQuestions: 0 };
         }
         topicStats[topic].totalQuestions++;
         
         const progress = progressData[q.id] || { hits: 0, misses: 0 };
         const totalAttempts = (progress.hits || 0) + (progress.misses || 0);
+        
+        if (totalAttempts > 0) {
+          topicStats[topic].attemptedQuestions++;
+        }
+        
         const masteryLevel = totalAttempts > 0 ? (progress.hits || 0) / totalAttempts : 0;
         
         topicStats[topic].totalMastery += masteryLevel;
@@ -45,7 +50,9 @@ export function KnowledgeHeatmap({ userId, userRole, permissions }: KnowledgeHea
       const analytics = analyzeTopics(sessionsData);
       const timeMap = new Map(analytics.map(a => [a.topic, a.averageTime]));
 
-      const processedStats = Object.entries(topicStats).map(([topic, data]) => ({
+      const processedStats = Object.entries(topicStats)
+        .filter(([_, data]) => data.attemptedQuestions > 0)
+        .map(([topic, data]) => ({
         topic,
         mastery: (data.totalMastery / data.totalQuestions) * 100,
         count: data.totalQuestions,

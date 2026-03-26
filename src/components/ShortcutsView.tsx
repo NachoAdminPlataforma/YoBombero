@@ -19,7 +19,7 @@ export function ShortcutsView({ userId, userRole, permissions, appUser }: Shortc
   const tabs = [
     { id: 'phonetic', label: 'Calculadora Fonética', icon: Brain },
     { id: 'images', label: 'Generador de Imágenes', icon: ImageIcon },
-    { id: 'legislation', label: 'Analizador de Legislación', icon: FileText },
+    { id: 'legislation', label: 'Profesor de Legislación', icon: FileText },
   ] as const;
 
   return (

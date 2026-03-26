@@ -20,7 +20,7 @@ const OPPOSITION_OPTIONS = [
 
 export function OnboardingModal({ user, onComplete }: OnboardingModalProps) {
   const [step, setStep] = useState(1);
-  const [displayName, setDisplayName] = useState(user.displayName || '');
+  const [displayName, setDisplayName] = useState(user.displayName?.split(' ')[0] || '');
   const [gender, setGender] = useState<'Opositor' | 'Opositora' | null>(user.gender || null);
   const [oppositionType, setOppositionType] = useState<string | null>(user.oppositionType || null);
   const [loading, setLoading] = useState(false);
@@ -60,7 +60,7 @@ export function OnboardingModal({ user, onComplete }: OnboardingModalProps) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Tu nombre o apodo</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Tu nombre (sin apellidos)</label>
                 <input
                   type="text"
                   value={displayName}

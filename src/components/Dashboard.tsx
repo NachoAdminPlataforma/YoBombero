@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { Question } from '../types';
 import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { KnowledgeHeatmap } from './KnowledgeHeatmap';
+import { InfoTooltip } from './InfoTooltip';
 import { User as AppUser } from '../types';
 
 interface DashboardProps {
@@ -39,7 +40,6 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
 
   const getWelcomeMessage = () => {
     if (!appUser) return "¡Hola!";
-    const genderLabel = appUser.gender || 'Opositor/a';
     const name = appUser.displayName.split(' ')[0] || '';
     const emoji = getOppositionEmoji(appUser.oppositionType);
     
@@ -49,9 +49,9 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
     else if (appUser.oppositionType === 'justicia') specificMsg = "¡Hágase justicia! ⚖️";
     
     const messages = [
-      `¡Vamos con todo, ${genderLabel} ${name}! ${emoji}`,
+      `¡Vamos con todo, ${name}! ${emoji}`,
       `Cada pregunta cuenta, ${name}. ¡A por la plaza! 🎯`,
-      `Hoy es un gran día para avanzar, ${genderLabel}. 🚀`,
+      `Hoy es un gran día para avanzar, ${name}. 🚀`,
       `Tu esfuerzo de hoy es tu éxito de mañana. 🌟`,
       specificMsg
     ].filter(m => m !== "");
@@ -201,8 +201,17 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
           <div className="flex items-center gap-3">
             <Settings2 className="text-slate-400 dark:text-slate-500" />
             <h2 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white">Generador a la Carta</h2>
+            <InfoTooltip 
+              title="Modos de Test" 
+              content={
+                <>
+                  <p><strong>Modo Anki:</strong> Utiliza un algoritmo de repaso espaciado. Te mostrará más a menudo las preguntas que sueles fallar y menos las que ya dominas.</p>
+                  <p><strong>Modo Equilibrado:</strong> También usa el algoritmo inteligente, pero garantiza que verás un número específico de preguntas de cada tema que selecciones, ideal para repasos generales.</p>
+                </>
+              }
+            />
           </div>
-          <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 tour-test-modes">
             <button
               onClick={() => setTestMode('srs')}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -211,7 +220,7 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
-              Modo SRS
+              Modo Anki
             </button>
             <button
               onClick={() => setTestMode('balanced')}
@@ -248,8 +257,8 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
               </div>
               <p className="text-[10px] text-slate-400 mt-1 italic">
                 {testMode === 'srs' 
-                  ? 'El modo SRS prioriza las preguntas más urgentes según el algoritmo.' 
-                  : 'El modo Equilibrado reparte el total entre los temas seleccionados.'}
+                  ? 'El modo Anki prioriza las preguntas más urgentes según el algoritmo.' 
+                  : 'En el modo equilibrado también se aplica el algoritmo pero asegurando el número de preguntas que quieras hacer de cada tema.'}
               </p>
             </div>
           </div>
@@ -341,7 +350,7 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
           <button
             onClick={handleCustomTest}
             disabled={loading || selectedTopics.length === 0}
-            className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-xl shadow-slate-200 dark:shadow-none active:scale-95 flex items-center justify-center gap-3"
+            className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-xl shadow-slate-200 dark:shadow-none active:scale-95 flex items-center justify-center gap-3 tour-start-test"
           >
             {loading ? (
               <>Generando...</>

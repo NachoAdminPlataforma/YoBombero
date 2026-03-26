@@ -105,7 +105,7 @@ service cloud.firestore {
       return isAuthenticated() &&
         ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-          (request.auth.token.email == "nachotestprueba@gmail.com"));
+          (request.auth.token.get('email', '') == "nachotestprueba@gmail.com"));
     }
     
     function hasRequiredFields(fields) {
@@ -117,7 +117,7 @@ service cloud.firestore {
     }
     
     function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+      return email is string && (email == '' || email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"));
     }
     
     function isValidUrl(url) {
@@ -141,7 +141,8 @@ service cloud.firestore {
              (!('gender' in data) || data.gender in ['Opositor', 'Opositora']) &&
              (!('oppositionType' in data) || data.oppositionType is string) &&
              (!('onboardingCompleted' in data) || data.onboardingCompleted is bool) &&
-             (!('sessionId' in data) || data.sessionId is string || data.sessionId == null);
+             (!('sessionId' in data) || data.sessionId is string || data.sessionId == null) &&
+             (!('tutorialsCompleted' in data) || data.tutorialsCompleted is map);
     }
 
     function isValidFeedback(data) {

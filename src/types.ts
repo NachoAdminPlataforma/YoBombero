@@ -9,6 +9,7 @@ export interface User {
   oppositionType?: string;
   onboardingCompleted?: boolean;
   sessionId?: string;
+  tutorialsCompleted?: Record<string, boolean>;
 }
 
 export interface Feedback {

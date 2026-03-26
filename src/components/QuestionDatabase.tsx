@@ -577,7 +577,7 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
           })}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 tour-db-filters">
           {isSelectionMode ? (
             <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800">
               <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
@@ -1066,7 +1066,7 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
               Base de Datos
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">
-              Gestiona y organiza tu material de estudio
+              Gestiona y organiza tus preguntas
             </p>
           </div>
         </div>
