@@ -5,13 +5,16 @@ import { playNotificationSound } from '../lib/audio';
 import { FileText, Upload, Loader2, File as FileIcon, X, Folder } from 'lucide-react';
 import Markdown from 'react-markdown';
 
+import { Question, User as AppUser, Feedback } from '../types';
+
 interface LegislationAnalyzerProps {
   userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
+  appUser: AppUser | null;
 }
 
-export function LegislationAnalyzer({ userId, userRole, permissions }: LegislationAnalyzerProps) {
+export function LegislationAnalyzer({ userId, userRole, permissions, appUser }: LegislationAnalyzerProps) {
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [fileContext, setFileContext] = useState('');
@@ -92,6 +95,11 @@ export function LegislationAnalyzer({ userId, userRole, permissions }: Legislati
       if (!apiKey) throw new Error("API Key de Gemini no configurada");
       const ai = new GoogleGenAI({ apiKey: apiKey as string });
       
+      const opposition = appUser?.oppositionType || 'opositor';
+      const gender = appUser?.gender || 'Opositor';
+      const name = appUser?.displayName?.split(' ')[0] || 'estudiante';
+      const platform = appUser?.platformName || 'la plataforma';
+
       const systemInstruction = `Actúa como un/a experto/a en comprensión, análisis y didáctica de textos. Eres un experto en legislación española. Genera siempre el texto en español correcto, utilizando tildes (á, é, í, ó, ú) y la letra ñ correctamente. Asegúrate de que la codificación de caracteres sea UTF-8 y no utilices códigos numéricos para representar caracteres especiales.
 
 Sobre el artículo ${fileContext.trim() ? `"${fileContext.trim()}"` : 'proporcionado'}
@@ -103,16 +111,17 @@ Debes realizar todas las tareas que se indican a continuación sin omitir inform
 - Reescribe el contenido del artículo utilizando un lenguaje claro, sencillo y accesible.
 - Mantén el significado original, pero elimina tecnicismos innecesarios o explícalos de forma simple.
 
-2. Analogía del contenido del artículo (CONTEXTO OPOSICIÓN BOMBERO)
+2. Analogía del contenido del artículo (CONTEXTO: ${gender.toUpperCase()} A ${opposition.toUpperCase().replace('_', ' ')})
 
 - Explica las ideas principales del artículo mediante una analogía fácil de comprender.
-- IMPORTANTE: La analogía DEBE estar ambientada en el entorno de una opositora a BOMBERO. Utiliza ejemplos relacionados con tus profesores de legislación, tu profesor de bombero, situaciones en el parque de bomberos, o la vida cotidiana de un opositor.
+- IMPORTANTE: La analogía DEBE estar ambientada en el entorno de un/a ${gender} a ${opposition.replace('_', ' ')}. Utiliza ejemplos relacionados con tus profesores de legislación, tu profesor de ${opposition.replace('_', ' ')}, situaciones en el lugar donde trabajarás (${opposition.replace('_', ' ')}), o la vida cotidiana de un opositor.
+- Dirígete al usuario como ${name}.
 - La analogía debe ser coherente y ayudar a entender el mensaje central del texto.
 
-3. Caso de aplicación práctica (AYUNTAMIENTO DE SEVILLA / BOMBEROS)
+3. Caso de aplicación práctica (PUESTO QUE OCUPARÁS: ${opposition.toUpperCase().replace('_', ' ')})
 
-- Describe uno o más ejemplos prácticos de cómo se aplica lo explicado en el artículo en situaciones reales relacionadas con el AYUNTAMIENTO DE SEVILLA (donde vas a trabajar) o con la profesión de BOMBERO.
-- Los ejemplos deben ser concretos, realistas y directamente relacionados con el ámbito de los bomberos o la administración local de Sevilla.
+- Describe uno o más ejemplos prácticos de cómo se aplica lo explicado en el artículo en situaciones reales relacionadas con el puesto de ${opposition.replace('_', ' ')} que vas a ocupar.
+- Los ejemplos deben ser concretos, realistas y directamente relacionados con el ámbito de tu futura profesión o la administración local/estatal donde trabajarás.
 
 4. Conversión del artículo en afirmaciones tipo test
 

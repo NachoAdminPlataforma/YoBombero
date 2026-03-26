@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
-import { Question, ReviewHistory } from '../types';
+import { Question, User as AppUser, ReviewHistory } from '../types';
 import { Folder, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Edit2, Trash2, Clock, CheckCircle2, XCircle, ArrowLeft, Save, X, Search, Database, FileText, Star, MessageSquare, AlertTriangle, ListFilter, LayoutGrid, Move, Upload, File as FileIcon, Loader2 } from 'lucide-react';
 import { QuestionDetailsModal } from './QuestionDetailsModal';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -231,9 +231,10 @@ interface QuestionDatabaseProps {
   userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
+  appUser: AppUser | null;
 }
 
-export function QuestionDatabase({ userId, userRole, permissions }: QuestionDatabaseProps) {
+export function QuestionDatabase({ userId, userRole, permissions, appUser }: QuestionDatabaseProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentPath, setCurrentPath] = useState<string[]>([]); // [] -> ['Legislativo'] -> ['Legislativo', 'Tema 1']
   const [loading, setLoading] = useState(true);
@@ -1167,6 +1168,7 @@ export function QuestionDatabase({ userId, userRole, permissions }: QuestionData
           userId={userId}
           userRole={userRole}
           permissions={permissions}
+          appUser={appUser}
           onClose={() => setSelectedQuestion(null)}
           onUpdate={(updatedQuestion) => {
             setSelectedQuestion(updatedQuestion);

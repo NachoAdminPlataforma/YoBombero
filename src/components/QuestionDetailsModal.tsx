@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Question, ReviewHistory } from '../types';
+import { Question, User as AppUser, ReviewHistory } from '../types';
 import { api } from '../lib/api';
 import { Edit2, Save, X, Star, FileText, CheckCircle2, Clock, XCircle, AlertTriangle, Sparkles, Plus, Trash2, Loader2, Folder, ChevronRight, MessageSquare } from 'lucide-react';
 
@@ -8,12 +8,13 @@ interface QuestionDetailsModalProps {
   userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
+  appUser: AppUser | null;
   onClose: () => void;
   onUpdate: (updatedQuestion: Question) => void;
   onDelete?: (id: string) => void;
 }
 
-export function QuestionDetailsModal({ question, userId, userRole, permissions, onClose, onUpdate, onDelete }: QuestionDetailsModalProps) {
+export function QuestionDetailsModal({ question, userId, userRole, permissions, appUser, onClose, onUpdate, onDelete }: QuestionDetailsModalProps) {
   const [history, setHistory] = useState<ReviewHistory[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Question>>(question);
@@ -171,8 +172,12 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
   const handleGenerateMnemonic = async () => {
     setIsGeneratingMnemonic(true);
     try {
+      const opposition = appUser?.oppositionType || 'opositor';
+      const gender = appUser?.gender || 'Opositor';
+      const name = appUser?.displayName?.split(' ')[0] || 'estudiante';
+
       const context = attachedPdf ? `CONTENIDO DEL PDF ADJUNTO:\n${attachedPdf.extractedText}\n\n` : '';
-      const prompt = `${context}Pregunta: ${question.text}\nOpciones: ${question.options.join(', ')}\nRespuesta correcta: ${question.options[question.correctOptionIndex]}\n\nGenera una regla mnemotécnica creativa y fácil de recordar para esta pregunta. Si hay un PDF adjunto, asegúrate de que la mnemotécnica sea coherente con la terminología del tema. Devuelve SOLO el texto de la mnemotécnica.`;
+      const prompt = `${context}Pregunta: ${question.text}\nOpciones: ${question.options.join(', ')}\nRespuesta correcta: ${question.options[question.correctOptionIndex]}\n\nActúa como un profesor de legislación experto para un/a ${gender} a ${opposition.replace('_', ' ')}. Genera una regla mnemotécnica creativa y fácil de recordar para esta pregunta. Dirígete al usuario como ${name}. Utiliza ejemplos relacionados con la profesión de ${opposition.replace('_', ' ')} o situaciones de estudio de un opositor. Si hay un PDF adjunto, asegúrate de que la mnemotécnica sea coherente con la terminología del tema. Devuelve SOLO el texto de la mnemotécnica.`;
       
       const mnemonic = await api.generateAIContent(prompt);
       if (mnemonic) {

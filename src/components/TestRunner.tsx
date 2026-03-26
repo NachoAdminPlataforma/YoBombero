@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Question } from '../types';
+import { Question, User as AppUser } from '../types';
 import { calculateNextReview } from '../lib/spacedRepetition';
 import { api } from '../lib/api';
 import { Lightbulb, ArrowRight, CheckCircle2, XCircle, Brain, Star, Save, Edit2, Flag, ChevronDown, AlertTriangle, Pause, Play, MessageSquare, Trash2, Plus } from 'lucide-react';
@@ -11,9 +11,10 @@ interface TestRunnerProps {
   userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
+  appUser: AppUser | null;
 }
 
-export function TestRunner({ questions, onComplete, userId, userRole, permissions }: TestRunnerProps) {
+export function TestRunner({ questions, onComplete, userId, userRole, permissions, appUser }: TestRunnerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -569,6 +570,7 @@ export function TestRunner({ questions, onComplete, userId, userRole, permission
             userId={userId}
             userRole={userRole}
             permissions={permissions}
+            appUser={appUser}
             onClose={() => setSelectedQuestionToEdit(null)}
             onUpdate={(updatedQuestion) => {
               // Update the question in the answers array so the UI reflects changes

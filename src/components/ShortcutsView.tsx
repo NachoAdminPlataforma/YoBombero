@@ -54,7 +54,7 @@ export function ShortcutsView({ userId, userRole, permissions, appUser }: Shortc
           <ImageGenerator appUser={appUser} />
         </div>
         <div className={activeTab === 'legislation' ? 'animate-in fade-in slide-in-from-bottom-2 duration-300' : 'hidden'}>
-          <LegislationAnalyzer userId={userId} userRole={userRole} permissions={permissions} />
+          <LegislationAnalyzer userId={userId} userRole={userRole} permissions={permissions} appUser={appUser} />
         </div>
       </div>
     </div>

@@ -9,7 +9,6 @@ import { GlobalSearch } from './components/GlobalSearch';
 import { AdminPanel } from './components/AdminPanel';
 import { OnboardingModal } from './components/OnboardingModal';
 import { EditProfileModal } from './components/EditProfileModal';
-import { TourGuide } from './components/TourGuide';
 import { FeedbackSection } from './components/FeedbackSection';
 import { Question, User as AppUser, Feedback } from './types';
 import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock, Heart, Shield, Settings, UserCircle, Wrench } from 'lucide-react';
@@ -639,6 +638,7 @@ export default function App() {
             userId={user.uid} 
             userRole={appUser?.role || 'student'} 
             permissions={appUser?.permissions || []} 
+            appUser={appUser}
           />
         </div>
         <div className={currentView === 'history' ? 'block' : 'hidden'}>
@@ -670,6 +670,7 @@ export default function App() {
             userId={user.uid} 
             userRole={appUser?.role || 'student'}
             permissions={appUser?.permissions || []}
+            appUser={appUser}
           />
         )}
       </main>
@@ -692,7 +693,6 @@ export default function App() {
           }}
         />
       )}
-      <TourGuide currentView={currentView} user={appUser} isDarkMode={isDarkMode} />
     </div>
   );
 }
