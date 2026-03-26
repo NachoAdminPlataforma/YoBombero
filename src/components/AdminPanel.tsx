@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { User, Feedback, SavedPrompt } from '../types';
-import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock, RefreshCw, AlertTriangle, Sparkles, PenTool, Save, X, FileText } from 'lucide-react';
+import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock, RefreshCw, AlertTriangle, Sparkles, PenTool, Save, X, FileText, Zap } from 'lucide-react';
 
 interface AdminPanelProps {
   userId: string;
@@ -452,7 +452,12 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                     <div className="flex items-center gap-3">
                       <img src={user.photoURL} alt="" className="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-700" referrerPolicy="no-referrer" />
                       <div>
-                        <div className="font-bold text-slate-900 dark:text-white">{user.displayName}</div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          {user.displayName}
+                          {user.sessionId && (
+                            <span className="flex h-2 w-2 rounded-full bg-emerald-500" title="Sesión Activa" />
+                          )}
+                        </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">{user.email}</div>
                       </div>
                     </div>
@@ -538,7 +543,19 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                       </div>
 
                       {/* Danger Zone */}
-                      <div className="pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                      <div className="pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`¿Estás seguro de que quieres cerrar la sesión de ${user.displayName}? El usuario tendrá que volver a iniciar sesión.`)) {
+                              await api.resetUserSession(user.id);
+                              alert('Sesión reseteada correctamente.');
+                            }
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-all"
+                        >
+                          <Zap size={14} />
+                          Resetear Sesión (Cerrar sesión remota)
+                        </button>
                         <button
                           onClick={() => handleDeleteUser(user.id, user.email)}
                           className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"

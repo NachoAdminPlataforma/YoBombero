@@ -815,6 +815,15 @@ export const api = {
     }
   },
 
+  async resetUserSession(userId: string): Promise<void> {
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, { sessionId: deleteField() });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    }
+  },
+
   async updateUserPermissions(userId: string, permissions: string[]): Promise<void> {
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { permissions });

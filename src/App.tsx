@@ -19,7 +19,16 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentSessionId] = useState(() => Math.random().toString(36).substring(2, 15));
+  const [currentSessionId] = useState(() => {
+    // We use localStorage to allow multiple tabs in the same browser 
+    // but prevent different browsers or devices from sharing the same account.
+    let sid = localStorage.getItem('app_session_id');
+    if (!sid) {
+      sid = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('app_session_id', sid);
+    }
+    return sid;
+  });
   const [sessionConflict, setSessionConflict] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'test' | 'database' | 'history' | 'shortcuts' | 'admin' | 'feedback'>('dashboard');
   const [testQuestions, setTestQuestions] = useState<Question[]>([]);
@@ -179,26 +188,54 @@ export default function App() {
   if (!user) {
     return (
       <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6 ${isDarkMode ? 'dark' : ''}`}>
-        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 text-center border border-slate-200 dark:border-slate-700">
-          <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <BookOpen size={40} />
+        <div className="max-w-md w-full">
+          <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl p-10 text-center border border-slate-200 dark:border-slate-700 relative overflow-hidden">
+            {/* Background decorative elements */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
+            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
+            
+            <div className="relative">
+              <div className="w-24 h-24 bg-indigo-600 dark:bg-indigo-500 text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-200 dark:shadow-none transform -rotate-6">
+                <BookOpen size={48} />
+              </div>
+              
+              <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-3 tracking-tight">
+                Mi Plataforma <span className="text-indigo-600 dark:text-indigo-400">Test</span> 📚
+              </h1>
+              <p className="text-lg text-slate-600 dark:text-slate-400 mb-10 font-medium">
+                La herramienta definitiva para opositores de élite.
+              </p>
+              
+              <div className="space-y-4">
+                <button 
+                  onClick={handleLogin}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-indigo-200 dark:shadow-none"
+                >
+                  <LogIn size={24} />
+                  Entrar con Google
+                </button>
+                
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 px-4">
+                  Al iniciar sesión, aceptas nuestras <span className="underline cursor-pointer hover:text-indigo-500">Condiciones de Uso</span> y <span className="underline cursor-pointer hover:text-indigo-500">Política de Privacidad</span>.
+                </p>
+              </div>
+
+              <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-700 flex items-center justify-center gap-6">
+                <button 
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  className="flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                >
+                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+                  {isDarkMode ? "Modo Claro" : "Modo Oscuro"}
+                </button>
+              </div>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Mi Plataforma Test 📚</h1>
-          <p className="text-slate-600 dark:text-slate-400 mb-8">Inicia sesión para acceder a tus tests y seguir tu progreso.</p>
-          <button 
-            onClick={handleLogin}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-200 dark:shadow-none"
-          >
-            <LogIn size={20} />
-            Entrar con Google
-          </button>
-          <div className="mt-8 flex items-center justify-center gap-4">
-            <button 
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-            >
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
+          
+          <div className="mt-8 text-center">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              ¿No tienes acceso? Contacta con tu tutor para solicitarlo.
+            </p>
           </div>
         </div>
       </div>

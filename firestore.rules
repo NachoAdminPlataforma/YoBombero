@@ -216,10 +216,9 @@ service cloud.firestore {
                       (isOwner(userId) || isAdmin()) &&
                       (request.resource.data.role == 'pending' || isAdmin());
       allow update: if isAuthenticated() && isValidUser(request.resource.data) &&
-                      (isAdmin() || (isOwner(userId) && (
-                        request.resource.data.role == resource.data.role ||
-                        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sessionId']))
-                      )));
+                      (isAdmin() || (isOwner(userId) && 
+                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'email'])
+                      ));
       allow delete: if isAdmin();
     }
 
