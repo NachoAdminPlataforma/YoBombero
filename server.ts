@@ -1,6 +1,18 @@
 import express from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import path from 'path';
+import admin from 'firebase-admin';
+
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  try {
+    admin.initializeApp();
+  } catch (e) {
+    console.warn("Firebase Admin could not be initialized with default credentials.");
+  }
+}
+
+const db = admin.apps.length ? admin.firestore() : null;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -79,6 +91,20 @@ app.post('/api/generate-questions', async (req, res) => {
     const ai = getAI();
     const data = req.body;
     
+    let customPromptText = data.customPrompt || '';
+    
+    // If promptId is provided, fetch the content from Firestore (admin prompts)
+    if (data.promptId && db) {
+      try {
+        const promptDoc = await db.collection('prompt_contents').doc(data.promptId).get();
+        if (promptDoc.exists) {
+          customPromptText = promptDoc.data()?.content || '';
+        }
+      } catch (e) {
+        console.error('Error fetching prompt content:', e);
+      }
+    }
+    
     let urlContent = '';
     if (data.url) {
       try {
@@ -123,7 +149,7 @@ app.post('/api/generate-questions', async (req, res) => {
          ${existingQuestionsContext}
 
       Sección específica a evaluar/extraer: ${data.section || 'Todo el documento'}
-      Instrucciones adicionales: ${data.customPrompt || 'Ninguna'}
+      Instrucciones adicionales: ${customPromptText || 'Ninguna'}
       
       URL proporcionada:
       ${data.url || 'Ninguna'}
@@ -172,12 +198,11 @@ app.post('/api/generate-questions', async (req, res) => {
       config.tools = [{ urlContext: {} }];
     }
     
-    const modelToTry = 'gemini-3.1-pro-preview';
-    const fallbackModel = 'gemini-3-flash-preview';
+    const modelToUse = 'gemini-3-flash-preview';
     
     try {
       const response = await ai.models.generateContent({
-        model: modelToTry,
+        model: modelToUse,
         contents: contents,
         config: config
       });
@@ -185,19 +210,8 @@ app.post('/api/generate-questions', async (req, res) => {
       const textResponse = response.text || '[]';
       res.json(parseAIResponse(textResponse));
     } catch (error: any) {
-      console.warn(`Error with ${modelToTry}, trying fallback ${fallbackModel}:`, error);
-      try {
-        const response = await ai.models.generateContent({
-          model: fallbackModel,
-          contents: contents,
-          config: config
-        });
-        const textResponse = response.text || '[]';
-        res.json(parseAIResponse(textResponse));
-      } catch (fallbackError: any) {
-        console.error("Fallback AI Error:", fallbackError);
-        res.status(500).json({ error: `Error de la IA: ${fallbackError.message || 'Desconocido'}` });
-      }
+      console.error("AI Error:", error);
+      res.status(500).json({ error: `Error de la IA: ${error.message || 'Desconocido'}` });
     }
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -231,22 +245,13 @@ app.post('/api/generate-mnemonic', async (req, res) => {
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-3-flash-preview',
         contents: prompt,
       });
       res.json({ mnemonic: response.text || '' });
     } catch (error: any) {
-      console.warn("Mnemonic AI Error, trying fallback:", error);
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: prompt,
-        });
-        res.json({ mnemonic: response.text || '' });
-      } catch (fallbackError: any) {
-        console.error("Fallback Mnemonic AI Error:", fallbackError);
-        res.status(500).json({ error: 'Error al generar la regla mnemotécnica.' });
-      }
+      console.error("Mnemonic AI Error:", error);
+      res.status(500).json({ error: 'Error al generar la regla mnemotécnica.' });
     }
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -277,7 +282,7 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3-flash-preview",
         contents: prompt,
         config: config
       });
@@ -285,22 +290,50 @@ Devuelve SOLO las palabras, sin explicaciones ni las letras entre paréntesis.`;
       const words = JSON.parse(text);
       res.json({ words: Array.isArray(words) ? words : [] });
     } catch (error: any) {
-      console.warn("Phonetic AI Error, trying fallback:", error);
-      try {
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: prompt,
-          config: config
-        });
-        const text = response.text || '[]';
-        const words = JSON.parse(text);
-        res.json({ words: Array.isArray(words) ? words : [] });
-      } catch (e) {
-        res.json({ words: [] });
-      }
+      console.error("Phonetic AI Error:", error);
+      res.json({ words: [] });
     }
   } catch (error: any) {
     console.error("Error in /api/generate-phonetic:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/execute-prompt', async (req, res) => {
+  try {
+    const ai = getAI();
+    const { promptId, inputData } = req.body;
+
+    if (!db) {
+      return res.status(500).json({ error: "Servicio de base de datos no disponible" });
+    }
+
+    const contentDoc = await db.collection('prompt_contents').doc(promptId).get();
+    if (!contentDoc.exists) {
+      return res.status(404).json({ error: "Prompt no encontrado" });
+    }
+
+    const promptData = contentDoc.data();
+    let finalPrompt = promptData?.content || "";
+
+    if (inputData) {
+      Object.keys(inputData).forEach(key => {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        finalPrompt = finalPrompt.replace(regex, inputData[key]);
+      });
+    }
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: finalPrompt,
+      config: {
+        systemInstruction: "Eres un asistente experto en oposiciones y legislación. Genera siempre el texto en español correcto.",
+      }
+    });
+
+    res.json({ text: response.text || "" });
+  } catch (error: any) {
+    console.error("Error in /api/execute-prompt:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -352,7 +385,7 @@ async function startServer() {
 
   // Only listen on a port if we are not running as a Vercel serverless function
   if (!process.env.VERCEL) {
-    app.listen(PORT, '0.0.0.0', () => {
+    app.listen(Number(PORT), '0.0.0.0', () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   }

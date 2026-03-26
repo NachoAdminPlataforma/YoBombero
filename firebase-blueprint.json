@@ -30,9 +30,34 @@
         "permissions": { "type": "array", "items": { "type": "string" } },
         "gender": { "type": "string", "enum": ["Opositor", "Opositora"] },
         "oppositionType": { "type": "string" },
-        "onboardingCompleted": { "type": "boolean" }
+        "onboardingCompleted": { "type": "boolean" },
+        "sessionId": { "type": "string", "description": "Current active session ID for multi-account prevention" }
       },
       "required": ["email", "role"]
+    },
+    "SavedPrompt": {
+      "title": "SavedPrompt",
+      "description": "Metadata for a saved prompt",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "userId": { "type": "string" },
+        "isAdminPrompt": { "type": "boolean" },
+        "topic": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "userId"]
+    },
+    "PromptContent": {
+      "title": "PromptContent",
+      "description": "The actual text content of a prompt",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" },
+        "userId": { "type": "string" },
+        "isAdminPrompt": { "type": "boolean" }
+      },
+      "required": ["content", "userId"]
     },
     "Feedback": {
       "title": "Feedback",

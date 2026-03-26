@@ -588,18 +588,98 @@ export const api = {
     }
   },
 
-  async getSavedPrompts(): Promise<SavedPrompt[]> {
+  async getSavedPrompts(userId: string, userRole: 'admin' | 'student', permissions: string[]): Promise<SavedPrompt[]> {
     try {
       const snapshot = await getDocs(collection(db, 'saved_prompts'));
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
+      const prompts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
+      
+      // Filter based on ownership or admin status + topic permissions
+      return prompts.filter(p => 
+        userRole === 'admin' || 
+        p.userId === userId || 
+        (p.isAdminPrompt && (!p.topic || permissions.includes(p.topic)))
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
       return [];
     }
   },
 
-  async savePrompt(title: string, prompt: string): Promise<void> {
-    await addDoc(collection(db, 'saved_prompts'), { title, prompt });
+  async getPromptContent(promptId: string): Promise<string> {
+    try {
+      const docRef = doc(db, 'prompt_contents', promptId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return snap.data().content;
+      }
+      return '';
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `prompt_contents/${promptId}`);
+      return '';
+    }
+  },
+
+  async savePrompt(userId: string, title: string, content: string, isAdminPrompt: boolean = false, topic?: string): Promise<void> {
+    try {
+      const now = new Date().toISOString();
+      const promptRef = await addDoc(collection(db, 'saved_prompts'), {
+        title,
+        userId,
+        isAdminPrompt,
+        topic,
+        createdAt: now
+      });
+
+      await setDoc(doc(db, 'prompt_contents', promptRef.id), {
+        content,
+        userId,
+        isAdminPrompt
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'saved_prompts');
+    }
+  },
+
+  async updatePrompt(promptId: string, title: string, content: string, topic?: string): Promise<void> {
+    try {
+      await updateDoc(doc(db, 'saved_prompts', promptId), {
+        title,
+        topic
+      });
+
+      await updateDoc(doc(db, 'prompt_contents', promptId), {
+        content
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `saved_prompts/${promptId}`);
+    }
+  },
+
+  async deletePrompt(promptId: string): Promise<void> {
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'saved_prompts', promptId));
+      batch.delete(doc(db, 'prompt_contents', promptId));
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `saved_prompts/${promptId}`);
+    }
+  },
+
+  async executePrompt(promptId: string, inputData?: Record<string, string>): Promise<string> {
+    try {
+      const response = await fetch('/api/execute-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promptId, inputData })
+      });
+      if (!response.ok) throw new Error("Error al ejecutar el prompt");
+      const data = await response.json();
+      return data.text || "";
+    } catch (error) {
+      console.error("Error executing prompt:", error);
+      throw error;
+    }
   },
 
   async getTestSessions(userId: string): Promise<TestSession[]> {

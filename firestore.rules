@@ -94,6 +94,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'student'];
     }
 
+    function hasTopicPermission(topic) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null && 
+             'permissions' in userDoc.data && 
+             userDoc.data.permissions.hasAny([topic, 'all']);
+    }
+
     function isAdmin() {
       return isAuthenticated() &&
         ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
@@ -209,7 +216,10 @@ service cloud.firestore {
                       (isOwner(userId) || isAdmin()) &&
                       (request.resource.data.role == 'pending' || isAdmin());
       allow update: if isAuthenticated() && isValidUser(request.resource.data) &&
-                      (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
+                      (isAdmin() || (isOwner(userId) && (
+                        request.resource.data.role == resource.data.role ||
+                        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sessionId']))
+                      )));
       allow delete: if isAdmin();
     }
 
@@ -218,7 +228,7 @@ service cloud.firestore {
       allow read: if isAuthorized() && (
         isAdmin() || 
         (resource.data.userId == request.auth.uid) ||
-        (!('userId' in resource.data))
+        (!('userId' in resource.data) && hasTopicPermission(resource.data.topic))
       );
       
       // Students can create their own questions
@@ -264,7 +274,7 @@ service cloud.firestore {
     }
 
     match /topic_resources/{resourceId} {
-      allow read: if isAuthorized();
+      allow read: if isAuthorized() && hasTopicPermission(resource.data.topic);
       allow write: if isAdmin();
     }
 
@@ -279,7 +289,33 @@ service cloud.firestore {
     }
 
     match /saved_prompts/{promptId} {
-      allow read, write: if isAdmin();
+      allow read: if isAuthorized() && (
+        isOwner(resource.data.userId) || 
+        (resource.data.isAdminPrompt == true && (!('topic' in resource.data) || hasTopicPermission(resource.data.topic)))
+      );
+      allow create: if isAuthorized() && (
+        (request.resource.data.userId == request.auth.uid && request.resource.data.isAdminPrompt == false) ||
+        isAdmin()
+      );
+      allow update, delete: if isAuthorized() && (
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) ||
+        isAdmin()
+      );
+    }
+
+    match /prompt_contents/{promptId} {
+      allow read: if isAuthorized() && (
+        isOwner(resource.data.userId) || 
+        (resource.data.isAdminPrompt == true && isAdmin())
+      );
+      allow create: if isAuthorized() && (
+        (request.resource.data.userId == request.auth.uid && request.resource.data.isAdminPrompt == false) ||
+        isAdmin()
+      );
+      allow update, delete: if isAuthorized() && (
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) ||
+        isAdmin()
+      );
     }
 
     // Default deny

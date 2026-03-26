@@ -3,7 +3,7 @@
   "appId": "1:869273560216:web:27475a86401ac0fae99ced",
   "apiKey": "AIzaSyDnTgQIcMmOQuSW3JMgwvPE0Avt1g7iOfM",
   "authDomain": "yobombero-test.firebaseapp.com",
-  "firestoreDatabaseId": "",
+  "firestoreDatabaseId": "(default)",
   "storageBucket": "yobombero-test.firebasestorage.app",
   "messagingSenderId": "869273560216",
   "measurementId": "G-XSF8RT27YT"

@@ -49,13 +49,13 @@ export function QuestionCreator({ userId, userRole, permissions }: QuestionCreat
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-        {activeTab === 'ai' ? <AIGenerator userId={userId} userRole={userRole} existingTopics={topics} /> : <ManualCreator userId={userId} userRole={userRole} existingTopics={topics} />}
+        {activeTab === 'ai' ? <AIGenerator userId={userId} userRole={userRole} permissions={permissions} existingTopics={topics} /> : <ManualCreator userId={userId} userRole={userRole} existingTopics={topics} />}
       </div>
     </div>
   );
 }
 
-function AIGenerator({ userId, userRole, existingTopics }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, classification: string}[] }) {
+function AIGenerator({ userId, userRole, permissions, existingTopics }: { userId: string, userRole: 'admin' | 'student', permissions: string[], existingTopics: {topic: string, classification: string}[] }) {
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -67,6 +67,7 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
   const [isNewTopic, setIsNewTopic] = useState(false);
   
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
@@ -100,7 +101,7 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
   }, []);
 
   const loadPrompts = async () => {
-    const prompts = await api.getSavedPrompts();
+    const prompts = await api.getSavedPrompts(userId, userRole, permissions);
     setSavedPrompts(prompts);
   };
 
@@ -112,10 +113,23 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
 
   const confirmSavePrompt = async () => {
     if (promptTitle) {
-      await api.savePrompt(promptTitle, customPrompt);
+      await api.savePrompt(userId, promptTitle, customPrompt, userRole === 'admin', isNewTopic ? undefined : topic);
       loadPrompts();
       setPromptModalOpen(false);
       setPromptTitle('');
+    }
+  };
+
+  const handleSelectPrompt = async (p: SavedPrompt) => {
+    if (p.isAdminPrompt && userRole !== 'admin') {
+      // Student applying admin prompt: don't show content, just set ID
+      setSelectedPromptId(p.id);
+      setCustomPrompt(`[Prompt de Administrador: ${p.title}]`);
+    } else {
+      // Admin or user applying their own prompt: show content
+      const content = await api.getPromptContent(p.id);
+      setCustomPrompt(content);
+      setSelectedPromptId(null);
     }
   };
 
@@ -151,7 +165,16 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
       const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
 
       const questions = await api.generateAIQuestions({
-        text: extraText, url, numQuestions: finalNumQuestions, section, customPrompt, classification, topic, fileData, existingQuestions: existingQuestions
+        text: extraText, 
+        url, 
+        numQuestions: finalNumQuestions, 
+        section, 
+        customPrompt: selectedPromptId ? undefined : customPrompt, 
+        promptId: selectedPromptId || undefined,
+        classification, 
+        topic, 
+        fileData, 
+        existingQuestions: existingQuestions
       });
       setPreviewQuestions(questions);
       setSuccessMsg(`¡Se generaron ${questions.length} preguntas! Revísalas abajo antes de guardar.`);
@@ -413,9 +436,13 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
         </div>
         <textarea 
           value={customPrompt}
-          onChange={(e) => setCustomPrompt(e.target.value)}
+          onChange={(e) => {
+            setCustomPrompt(e.target.value);
+            setSelectedPromptId(null); // Reset if user types manually
+          }}
           rows={3}
-          className="w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+          readOnly={!!selectedPromptId && userRole !== 'admin'}
+          className={`w-full px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white ${selectedPromptId && userRole !== 'admin' ? 'bg-slate-50 dark:bg-slate-900/50 italic text-slate-500' : ''}`}
           placeholder="Ej: Haz preguntas muy difíciles, con opciones que se parezcan mucho entre sí..."
         />
         {savedPrompts.length > 0 && (
@@ -425,10 +452,14 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
               <button 
                 key={p.id}
                 type="button"
-                onClick={() => setCustomPrompt(p.prompt)}
-                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-md transition-colors"
+                onClick={() => handleSelectPrompt(p)}
+                className={`text-xs px-2 py-1 rounded-md transition-colors ${
+                  selectedPromptId === p.id 
+                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' 
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
+                }`}
               >
-                {p.title}
+                {p.title} {p.isAdminPrompt && <span className="text-[10px] opacity-60 ml-1">(Admin)</span>}
               </button>
             ))}
           </div>

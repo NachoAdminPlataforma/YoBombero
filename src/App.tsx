@@ -13,12 +13,14 @@ import { Question, User as AppUser, Feedback } from './types';
 import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock, Heart, Shield } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentSessionId] = useState(() => Math.random().toString(36).substring(2, 15));
+  const [sessionConflict, setSessionConflict] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'test' | 'database' | 'history' | 'shortcuts' | 'admin' | 'feedback'>('dashboard');
   const [testQuestions, setTestQuestions] = useState<Question[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -32,6 +34,8 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   useEffect(() => {
+    let sessionUnsubscribe: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
@@ -40,7 +44,11 @@ export default function App() {
           const userSnap = await getDoc(userRef);
           
           if (userSnap.exists()) {
-            setAppUser(userSnap.data() as AppUser);
+            const userData = userSnap.data() as AppUser;
+            setAppUser(userData);
+            
+            // Update session ID
+            await updateDoc(userRef, { sessionId: currentSessionId });
           } else {
             // New user
             const isDefaultAdmin = firebaseUser.email === 'nachotestprueba@gmail.com';
@@ -50,24 +58,40 @@ export default function App() {
               role: isDefaultAdmin ? 'admin' : 'pending',
               displayName: firebaseUser.displayName || '',
               photoURL: firebaseUser.photoURL || '',
-              permissions: []
+              permissions: [],
+              sessionId: currentSessionId
             };
             await setDoc(userRef, newUser);
             setAppUser(newUser);
           }
+
+          // Listen for session changes
+          sessionUnsubscribe = onSnapshot(userRef, (doc) => {
+            if (doc.exists()) {
+              const data = doc.data();
+              if (data.sessionId && data.sessionId !== currentSessionId) {
+                setSessionConflict(true);
+              }
+            }
+          });
         } catch (error) {
           console.error("Error initializing user profile:", error);
-          // If it's a permission error, it might be because the rules are still propagating
-          // or there's a mismatch in the isAdmin logic.
         }
       } else {
         setAppUser(null);
+        if (sessionUnsubscribe) {
+          sessionUnsubscribe();
+          sessionUnsubscribe = null;
+        }
       }
       setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      unsubscribe();
+      if (sessionUnsubscribe) sessionUnsubscribe();
+    };
+  }, [currentSessionId]);
 
   useEffect(() => {
     console.log('Dark mode changed:', isDarkMode);
@@ -126,6 +150,28 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (sessionConflict) {
+    return (
+      <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6 ${isDarkMode ? 'dark' : ''}`}>
+        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-3xl shadow-2xl p-8 text-center border border-slate-200 dark:border-slate-700">
+          <div className="w-20 h-20 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Zap size={40} />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Sesión Cerrada</h1>
+          <p className="text-slate-600 dark:text-slate-400 mb-8">
+            Se ha iniciado sesión con esta cuenta en otro dispositivo. Por seguridad, esta sesión se ha cerrado.
+          </p>
+          <button 
+            onClick={handleLogout}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-all"
+          >
+            Volver al Inicio
+          </button>
+        </div>
       </div>
     );
   }

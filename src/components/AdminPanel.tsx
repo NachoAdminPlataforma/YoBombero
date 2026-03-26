@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { User, Feedback } from '../types';
-import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock, RefreshCw, AlertTriangle, Sparkles } from 'lucide-react';
+import { User, Feedback, SavedPrompt } from '../types';
+import { Users, Shield, BookOpen, ChevronDown, ChevronUp, Search, CheckCircle2, Upload, Database, AlertCircle, Loader2, MessageSquare, Trash2, Clock, RefreshCw, AlertTriangle, Sparkles, PenTool, Save, X, FileText } from 'lucide-react';
 
 interface AdminPanelProps {
   userId: string;
@@ -12,8 +12,9 @@ export function AdminPanel({ userId }: AdminPanelProps) {
   const [topics, setTopics] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [surveyResponses, setSurveyResponses] = useState<any[]>([]);
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'users' | 'feedback' | 'survey'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'feedback' | 'survey' | 'prompts'>('users');
   const [userFilter, setUserFilter] = useState<'all' | 'active' | 'pending' | 'blocked'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
@@ -21,6 +22,10 @@ export function AdminPanel({ userId }: AdminPanelProps) {
   const [importStatus, setImportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{id: string, email: string} | null>(null);
+  
+  // Prompt management state
+  const [editingPrompt, setEditingPrompt] = useState<{ id?: string, title: string, content: string, topic?: string } | null>(null);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
   const handleImportJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -70,6 +75,12 @@ export function AdminPanel({ userId }: AdminPanelProps) {
     const unsubSurvey = api.subscribeToSurveyResponses((data) => {
       setSurveyResponses(data);
     });
+
+    const loadPrompts = async () => {
+      const data = await api.getSavedPrompts(userId, 'admin', []);
+      setSavedPrompts(data);
+    };
+    loadPrompts();
 
     return () => {
       unsubUsers();
@@ -176,6 +187,47 @@ export function AdminPanel({ userId }: AdminPanelProps) {
     }
   };
 
+  const handleSavePrompt = async () => {
+    if (!editingPrompt || !editingPrompt.title || !editingPrompt.content) return;
+    setIsSavingPrompt(true);
+    try {
+      if (editingPrompt.id) {
+        await api.updatePrompt(editingPrompt.id, editingPrompt.title, editingPrompt.content, editingPrompt.topic);
+      } else {
+        await api.savePrompt(userId, editingPrompt.title, editingPrompt.content, true, editingPrompt.topic);
+      }
+      const data = await api.getSavedPrompts(userId, 'admin', []);
+      setSavedPrompts(data);
+      setEditingPrompt(null);
+    } catch (error) {
+      alert('Error al guardar el prompt.');
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
+
+  const handleDeletePrompt = async (promptId: string) => {
+    if (window.confirm('¿Estás seguro de que quieres eliminar este prompt?')) {
+      try {
+        await api.deletePrompt(promptId);
+        const data = await api.getSavedPrompts(userId, 'admin', []);
+        setSavedPrompts(data);
+      } catch (error) {
+        alert('Error al eliminar el prompt.');
+      }
+    }
+  };
+
+  const handleEditPrompt = async (prompt: SavedPrompt) => {
+    const content = await api.getPromptContent(prompt.id);
+    setEditingPrompt({
+      id: prompt.id,
+      title: prompt.title,
+      content,
+      topic: prompt.topic
+    });
+  };
+
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
       u.displayName?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -219,6 +271,12 @@ export function AdminPanel({ userId }: AdminPanelProps) {
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'survey' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
           >
             Encuesta
+          </button>
+          <button
+            onClick={() => setActiveTab('prompts')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'prompts' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            Prompts
           </button>
         </div>
       </div>
@@ -571,6 +629,135 @@ export function AdminPanel({ userId }: AdminPanelProps) {
               ))
             )}
           </div>
+        </div>
+      ) : activeTab === 'prompts' ? (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <PenTool className="text-indigo-500" size={20} />
+              Gestión de Prompts Globales
+            </h2>
+            <button 
+              onClick={() => setEditingPrompt({ title: '', content: '' })}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm flex items-center gap-2"
+            >
+              <PenTool size={14} />
+              Nuevo Prompt
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {savedPrompts.filter(p => p.isAdminPrompt).length === 0 ? (
+              <div className="text-center py-12 text-slate-500">No hay prompts globales creados.</div>
+            ) : (
+              savedPrompts.filter(p => p.isAdminPrompt).map(prompt => (
+                <div key={prompt.id} className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between bg-white dark:bg-slate-800/50 hover:border-indigo-300 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-lg">
+                      <FileText size={18} />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white text-sm">{prompt.title}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        {prompt.topic && (
+                          <span className="text-[10px] bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                            {prompt.topic}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <Clock size={10} />
+                          {new Date(prompt.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleEditPrompt(prompt)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      title="Editar"
+                    >
+                      <PenTool size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeletePrompt(prompt.id)}
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors"
+                      title="Eliminar"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Prompt Editor Modal */}
+          {editingPrompt && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    {editingPrompt.id ? 'Editar Prompt' : 'Nuevo Prompt Global'}
+                  </h3>
+                  <button onClick={() => setEditingPrompt(null)} className="text-slate-400 hover:text-slate-600">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Título del Prompt</label>
+                    <input 
+                      type="text"
+                      value={editingPrompt.title}
+                      onChange={(e) => setEditingPrompt({ ...editingPrompt, title: e.target.value })}
+                      placeholder="Ej: Generador de preguntas de plazos"
+                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Tema Asociado (Opcional)</label>
+                    <select 
+                      value={editingPrompt.topic || ''}
+                      onChange={(e) => setEditingPrompt({ ...editingPrompt, topic: e.target.value || undefined })}
+                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
+                    >
+                      <option value="">Sin tema específico (Global)</option>
+                      {topics.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <p className="text-[10px] text-slate-500 mt-1">Si seleccionas un tema, solo los alumnos con permiso en ese tema podrán usar este prompt.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Contenido del Prompt</label>
+                    <textarea 
+                      value={editingPrompt.content}
+                      onChange={(e) => setEditingPrompt({ ...editingPrompt, content: e.target.value })}
+                      placeholder="Escribe aquí las instrucciones para la IA..."
+                      rows={8}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-mono text-slate-900 dark:text-white"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">Los alumnos podrán aplicar este prompt pero nunca verán este contenido.</p>
+                  </div>
+                </div>
+                <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+                  <button 
+                    onClick={() => setEditingPrompt(null)}
+                    className="px-6 py-2 text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleSavePrompt}
+                    disabled={isSavingPrompt || !editingPrompt.title || !editingPrompt.content}
+                    className="px-6 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSavingPrompt ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    Guardar Prompt
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
