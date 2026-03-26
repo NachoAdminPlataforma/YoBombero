@@ -1,17 +1,21 @@
 {
   "name": "Plataforma Test Bomberos",
   "short_name": "Test Bomberos",
-  "description": "Plataforma de estudio para oposiciones de bomberos",
+  "description": "Plataforma de estudio y test para oposiciones de bomberos",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/1995/1995429.png",
+      "src": "https://fav.farm/🚒",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://fav.farm/🚒",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ]
 }
