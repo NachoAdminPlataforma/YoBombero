@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Question } from '../types';
-import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp, Lock } from 'lucide-react';
+import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp, Lock, HelpCircle, X } from 'lucide-react';
 import { KnowledgeHeatmap } from './KnowledgeHeatmap';
 import { InfoTooltip } from './InfoTooltip';
 import { User as AppUser } from '../types';
@@ -26,6 +26,7 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
   const [numQuestions, setNumQuestions] = useState<number>(10);
   const [loading, setLoading] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>([]);
+  const [showLockInfo, setShowLockInfo] = useState(false);
 
   const getOppositionEmoji = (type?: string) => {
     switch (type) {
@@ -175,21 +176,40 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
       <div className="relative bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-center overflow-hidden">
         {userRole === 'student' && answeredCount < 300 && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 sm:p-6 text-white bg-slate-900/20 dark:bg-slate-900/40">
-            <div className="bg-slate-900/95 p-6 sm:p-8 rounded-2xl border border-slate-700 shadow-2xl flex flex-col items-center max-w-lg mx-auto backdrop-blur-md">
-              <div className="bg-slate-800 p-4 rounded-full mb-4 border border-slate-700 shadow-inner">
-                <Lock size={40} className="text-indigo-400" />
-              </div>
-              <p className="font-bold text-lg sm:text-xl mb-4 text-center text-white leading-tight">
-                Esta función se desbloqueará cuando hayas respondido un total de 300 preguntas
-              </p>
-              <div className="bg-slate-800 px-6 py-2.5 rounded-full font-black text-indigo-300 mb-5 border border-slate-600 shadow-inner text-lg tracking-wide">
-                {answeredCount} / 300 preguntas
-              </div>
-              <p className="text-sm text-slate-300 italic text-center leading-relaxed">
-                El repaso espaciado es una técnica de estudio inteligente que programa repasos en intervalos de tiempo crecientes. Te ayudará a memorizar a largo plazo el temario.
-                <br/><br/>
-                <span className="text-slate-400"><strong>Ejemplo:</strong> Si fallas una pregunta sobre plazos procesales, te la volverá a preguntar mañana. Si la aciertas, te la preguntará en 3 días, luego en una semana, asegurando que no la olvides el día del examen.</span>
-              </p>
+            <div className="relative bg-slate-900/95 p-6 sm:p-8 rounded-2xl border border-slate-700 shadow-2xl flex flex-col items-center max-w-lg mx-auto backdrop-blur-md w-full">
+              <button 
+                onClick={() => setShowLockInfo(!showLockInfo)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors p-1"
+                title="¿Qué es el Repaso Espaciado?"
+              >
+                {showLockInfo ? <X size={20} /> : <HelpCircle size={20} />}
+              </button>
+
+              {showLockInfo ? (
+                <div className="text-left w-full animate-in fade-in zoom-in duration-200">
+                  <h3 className="font-bold text-lg mb-3 text-indigo-300 flex items-center gap-2">
+                    <BrainCircuit size={20} />
+                    ¿Qué es el Repaso Espaciado?
+                  </h3>
+                  <p className="text-sm text-slate-300 leading-relaxed mb-4 italic">
+                    Es una técnica de estudio inteligente que programa repasos en intervalos de tiempo crecientes. Te ayudará a memorizar a largo plazo el temario.
+                  </p>
+                  <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                    <p className="text-sm text-slate-400 italic">
+                      <strong className="text-slate-200 not-italic">Ejemplo:</strong> Si fallas una pregunta sobre plazos procesales, te la volverá a preguntar mañana. Si la aciertas, te la preguntará en 3 días, luego en una semana, asegurando que no la olvides el día del examen.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center animate-in fade-in zoom-in duration-200">
+                  <div className="bg-slate-800 p-4 rounded-full mb-4 border border-slate-700 shadow-inner">
+                    <Lock size={40} className="text-indigo-400" />
+                  </div>
+                  <p className="font-bold text-lg sm:text-xl text-center text-white leading-tight">
+                    Esta función se desbloqueará cuando hayas respondido <span className="text-indigo-300">{answeredCount}/300</span> preguntas
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
