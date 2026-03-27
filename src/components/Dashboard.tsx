@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Question } from '../types';
-import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
+import { BrainCircuit, Play, Settings2, Trophy, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { KnowledgeHeatmap } from './KnowledgeHeatmap';
 import { InfoTooltip } from './InfoTooltip';
 import { User as AppUser } from '../types';
@@ -18,6 +18,7 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
   const [urgentCount, setUrgentCount] = useState(0);
   const [newCount, setNewCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [topicsData, setTopicsData] = useState<{topic: string, classification: string}[]>([]);
   
   const [selectedTopics, setSelectedTopics] = useState<{topic: string, classification: string, count: number}[]>([]);
@@ -68,6 +69,9 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
       const now = new Date().toISOString();
       
       api.getUserProgress(userId).then(progress => {
+        const answered = Object.values(progress).filter((p: any) => p.hits > 0 || p.misses > 0).length;
+        setAnsweredCount(answered);
+
         const questionsWithProgress = questions
           .map(q => ({
             ...q,
@@ -168,30 +172,53 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
       <KnowledgeHeatmap userId={userId} userRole={userRole} permissions={permissions} />
 
       {/* Urgent Review Section */}
-      <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-center">
-        <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 mb-4">
-          <BrainCircuit size={24} className="md:w-8 md:h-8" />
-        </div>
-        <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-2">Repaso Espaciado</h2>
-        <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 mb-4">
-          Tienes <strong className="text-indigo-600 dark:text-indigo-400 text-lg">{urgentCount}</strong> preguntas pendientes de repaso hoy.
-        </p>
-        <div className="flex flex-wrap justify-center gap-3 md:gap-6 mb-6 text-xs md:text-sm">
-          <div className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium border border-emerald-100 dark:border-emerald-800">
-            <span className="font-bold text-emerald-800 dark:text-emerald-300">{newCount}</span> Nuevas
+      <div className="relative bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-center overflow-hidden">
+        {userRole === 'student' && answeredCount < 300 && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 sm:p-6 text-white bg-slate-900/20 dark:bg-slate-900/40">
+            <div className="bg-slate-900/95 p-6 sm:p-8 rounded-2xl border border-slate-700 shadow-2xl flex flex-col items-center max-w-lg mx-auto backdrop-blur-md">
+              <div className="bg-slate-800 p-4 rounded-full mb-4 border border-slate-700 shadow-inner">
+                <Lock size={40} className="text-indigo-400" />
+              </div>
+              <p className="font-bold text-lg sm:text-xl mb-4 text-center text-white leading-tight">
+                Esta función se desbloqueará cuando hayas respondido un total de 300 preguntas
+              </p>
+              <div className="bg-slate-800 px-6 py-2.5 rounded-full font-black text-indigo-300 mb-5 border border-slate-600 shadow-inner text-lg tracking-wide">
+                {answeredCount} / 300 preguntas
+              </div>
+              <p className="text-sm text-slate-300 italic text-center leading-relaxed">
+                El repaso espaciado es una técnica de estudio inteligente que programa repasos en intervalos de tiempo crecientes. Te ayudará a memorizar a largo plazo el temario.
+                <br/><br/>
+                <span className="text-slate-400"><strong>Ejemplo:</strong> Si fallas una pregunta sobre plazos procesales, te la volverá a preguntar mañana. Si la aciertas, te la preguntará en 3 días, luego en una semana, asegurando que no la olvides el día del examen.</span>
+              </p>
+            </div>
           </div>
-          <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium border border-amber-100 dark:border-amber-800">
-            <span className="font-bold text-amber-800 dark:text-amber-300">{reviewCount}</span> Para Repasar
+        )}
+        
+        <div className={userRole === 'student' && answeredCount < 300 ? 'opacity-20 pointer-events-none blur-[4px] select-none transition-all duration-500' : ''}>
+          <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 mb-4">
+            <BrainCircuit size={24} className="md:w-8 md:h-8" />
           </div>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-2">Repaso Espaciado</h2>
+          <p className="text-sm md:text-base text-slate-500 dark:text-slate-400 mb-4">
+            Tienes <strong className="text-indigo-600 dark:text-indigo-400 text-lg">{urgentCount}</strong> preguntas pendientes de repaso hoy.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3 md:gap-6 mb-6 text-xs md:text-sm">
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium border border-emerald-100 dark:border-emerald-800">
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">{newCount}</span> Nuevas
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-medium border border-amber-100 dark:border-amber-800">
+              <span className="font-bold text-amber-800 dark:text-amber-300">{reviewCount}</span> Para Repasar
+            </div>
+          </div>
+          <button
+            onClick={handleUrgentReview}
+            disabled={loading || urgentCount === 0 || (userRole === 'student' && answeredCount < 300)}
+            className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold py-3 px-8 rounded-xl transition-colors inline-flex items-center justify-center gap-2"
+          >
+            <Play size={20} />
+            Iniciar Repaso Urgente
+          </button>
         </div>
-        <button
-          onClick={handleUrgentReview}
-          disabled={loading || urgentCount === 0}
-          className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold py-3 px-8 rounded-xl transition-colors inline-flex items-center justify-center gap-2"
-        >
-          <Play size={20} />
-          Iniciar Repaso Urgente
-        </button>
       </div>
 
       {/* Custom Test Section */}
