@@ -33,8 +33,18 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [localSessionId] = useState(() => Math.random().toString(36).substring(2, 15));
+  const [localSessionId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedId = sessionStorage.getItem('app_session_id');
+      if (savedId) return savedId;
+      const newId = Math.random().toString(36).substring(2, 15);
+      sessionStorage.setItem('app_session_id', newId);
+      return newId;
+    }
+    return Math.random().toString(36).substring(2, 15);
+  });
   const [sessionConflict, setSessionConflict] = useState(false);
+  const [sessionInitialized, setSessionInitialized] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -58,6 +68,7 @@ export default function App() {
             }
             
             setAppUser(userData);
+            setSessionInitialized(true);
           } else {
             // New user
             const isDefaultAdmin = firebaseUser.email === 'nachotestprueba@gmail.com';
@@ -77,12 +88,14 @@ export default function App() {
             
             await setDoc(userRef, newUser);
             setAppUser(newUser);
+            setSessionInitialized(true);
           }
         } catch (error) {
           console.error("Error initializing user profile:", error);
         }
       } else {
         setAppUser(null);
+        setSessionInitialized(false);
         // Do not reset sessionConflict here so the user can see the conflict screen
       }
       setLoading(false);
@@ -99,7 +112,7 @@ export default function App() {
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as AppUser;
-        if (data.role !== 'admin' && data.sessionId && data.sessionId !== localSessionId) {
+        if (sessionInitialized && data.role !== 'admin' && data.sessionId && data.sessionId !== localSessionId) {
           setSessionConflict(true);
           handleLogout();
         } else {
