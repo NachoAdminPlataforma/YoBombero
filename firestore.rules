@@ -22,7 +22,7 @@ service cloud.firestore {
     //   - text: string (required)
     //   - options: list (required, 4 strings)
     //   - correctOptionIndex: number (required, 0-3)
-    //   - classification: string (required)
+    //   - folder: string (required)
     //   - topic: string (required)
     //   - createdAt: timestamp (required)
     //   - sourcePdf: string (optional)
@@ -61,11 +61,26 @@ service cloud.firestore {
     //   - incorrectCount: number (required)
     //   - score: number (required)
     //
+    // Collection: folders
+    // Document ID: folderId (random)
+    // Fields:
+    //   - name: string (required)
+    //   - userId: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: topics
+    // Document ID: topicId (random)
+    // Fields:
+    //   - name: string (required)
+    //   - folder: string (required)
+    //   - userId: string (optional)
+    //   - createdAt: timestamp (required)
+    //
     // Collection: topic_resources
     // Document ID: resourceId (random)
     // Fields:
     //   - topic: string (required)
-    //   - classification: string (required)
+    //   - folder: string (required)
     //   - fileName: string (required)
     //   - extractedText: string (required)
     //   - createdAt: timestamp (required)
@@ -157,11 +172,11 @@ service cloud.firestore {
     }
 
     function isValidQuestion(data) {
-      return hasRequiredFields(['text', 'options', 'correctOptionIndex', 'classification', 'topic']) &&
+      return hasRequiredFields(['text', 'options', 'correctOptionIndex', 'folder', 'topic']) &&
              data.text is string && data.text.size() > 0 && data.text.size() < 10000 &&
              data.options is list && data.options.size() >= 2 && data.options.size() <= 10 &&
              data.correctOptionIndex is int && data.correctOptionIndex >= 0 &&
-             data.classification is string && data.topic is string &&
+             data.folder is string && data.topic is string &&
              (!('userId' in data) || data.userId is string) &&
              (!('displayId' in data) || data.displayId is int) &&
              (!('hits' in data) || data.hits is int) &&
@@ -206,6 +221,21 @@ service cloud.firestore {
              data.correctCount is int &&
              data.incorrectCount is int &&
              data.score is number;
+    }
+
+    function isValidFolder(data) {
+      return hasRequiredFields(['name', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('userId' in data) || data.userId is string) &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidTopic(data) {
+      return hasRequiredFields(['name', 'folder', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.folder is string && data.folder.size() > 0 && data.folder.size() < 100 &&
+             (!('userId' in data) || data.userId is string) &&
+             isValidDateString(data.createdAt);
     }
 
     // ===============================================================
@@ -264,6 +294,20 @@ service cloud.firestore {
       allow read: if isAuthorized() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthorized() && isValidTestSession(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /folders/{folderId} {
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidFolder(request.resource.data) && (isAdmin() || request.resource.data.userId == request.auth.uid);
+      allow update: if isAuthorized() && isValidFolder(request.resource.data) && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
+    }
+
+    match /topics/{topicId} {
+      allow read: if isAuthorized();
+      allow create: if isAuthorized() && isValidTopic(request.resource.data) && (isAdmin() || request.resource.data.userId == request.auth.uid);
+      allow update: if isAuthorized() && isValidTopic(request.resource.data) && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
     }
 
     match /feedback/{feedbackId} {

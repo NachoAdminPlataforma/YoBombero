@@ -19,9 +19,9 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
   const [newCount, setNewCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
-  const [topicsData, setTopicsData] = useState<{topic: string, classification: string}[]>([]);
+  const [topicsData, setTopicsData] = useState<{topic: string, folder: string}[]>([]);
   
-  const [selectedTopics, setSelectedTopics] = useState<{topic: string, classification: string, count: number}[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<{topic: string, folder: string, count: number}[]>([]);
   const [testMode, setTestMode] = useState<'srs' | 'balanced'>('srs');
   const [numQuestions, setNumQuestions] = useState<number>(10);
   const [loading, setLoading] = useState(false);
@@ -66,34 +66,45 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
       setTopicsData(t);
     });
     
-    const unsubQuestions = api.subscribeToQuestions(userId, userRole, permissions, (questions) => {
+    let currentQuestions: any[] = [];
+    let currentProgress: Record<string, any> = {};
+
+    const updateCounts = () => {
       const now = new Date().toISOString();
+      const answered = Object.values(currentProgress).filter((p: any) => p.hits > 0 || p.misses > 0).length;
+      setAnsweredCount(answered);
+
+      const questionsWithProgress = currentQuestions
+        .map(q => ({
+          ...q,
+          ...(currentProgress[q.id] || { hits: 0, misses: 0, reps: 0, easeFactor: 2.5, interval: 0, nextReviewDate: new Date().toISOString() })
+        }));
+
+      const reviewQuestions = questionsWithProgress.filter(q => 
+        (q.hits > 0 || q.misses > 0) && 
+        (q.nextReview || q.nextReviewDate) <= now
+      );
+      const newQuestions = questionsWithProgress.filter(q => q.hits === 0 && q.misses === 0);
       
-      api.getUserProgress(userId).then(progress => {
-        const answered = Object.values(progress).filter((p: any) => p.hits > 0 || p.misses > 0).length;
-        setAnsweredCount(answered);
+      setUrgentCount(reviewQuestions.length + newQuestions.length);
+      setNewCount(newQuestions.length);
+      setReviewCount(reviewQuestions.length);
+    };
 
-        const questionsWithProgress = questions
-          .map(q => ({
-            ...q,
-            ...(progress[q.id] || { hits: 0, misses: 0, reps: 0, easeFactor: 2.5, interval: 0, nextReviewDate: new Date().toISOString() })
-          }));
+    const unsubQuestions = api.subscribeToQuestions(userId, userRole, permissions, (questions) => {
+      currentQuestions = questions;
+      updateCounts();
+    });
 
-        const reviewQuestions = questionsWithProgress.filter(q => 
-          (q.hits > 0 || q.misses > 0) && 
-          (q.nextReview || q.nextReviewDate) <= now
-        );
-        const newQuestions = questionsWithProgress.filter(q => q.hits === 0 && q.misses === 0);
-        
-        setUrgentCount(reviewQuestions.length + newQuestions.length);
-        setNewCount(newQuestions.length);
-        setReviewCount(reviewQuestions.length);
-      });
+    const unsubProgress = api.subscribeToUserProgress(userId, (progress) => {
+      currentProgress = progress;
+      updateCounts();
     });
 
     return () => {
       unsubscribe();
       unsubQuestions();
+      unsubProgress();
     };
   }, [userId, userRole, permissions]);
 
@@ -129,22 +140,22 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
     }
   };
 
-  const toggleTopic = (topic: string, classification: string) => {
+  const toggleTopic = (topic: string, folder: string) => {
     setSelectedTopics(prev => {
-      const exists = prev.find(t => t.topic === topic && t.classification === classification);
+      const exists = prev.find(t => t.topic === topic && t.folder === folder);
       if (exists) {
-        const newTopics = prev.filter(t => !(t.topic === topic && t.classification === classification));
+        const newTopics = prev.filter(t => !(t.topic === topic && t.folder === folder));
         return newTopics;
       } else {
         // Default count is 0, meaning it will use the distributed total if not manually set
-        return [...prev, { topic, classification, count: 0 }];
+        return [...prev, { topic, folder, count: 0 }];
       }
     });
   };
 
-  const updateTopicCount = (topic: string, classification: string, count: number) => {
+  const updateTopicCount = (topic: string, folder: string, count: number) => {
     setSelectedTopics(prev => prev.map(t => 
-      (t.topic === topic && t.classification === classification) ? { ...t, count } : t
+      (t.topic === topic && t.folder === folder) ? { ...t, count } : t
     ));
   };
 
@@ -310,22 +321,22 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
           </div>
 
           <div className="space-y-4">
-            {['Legislativo', 'Específico'].map(classification => {
-              const classTopics = topicsData.filter(t => t.classification === classification);
+            {Array.from(new Set(topicsData.map(t => t.folder))).map(folder => {
+              const classTopics = topicsData.filter(t => t.folder === folder && t.topic !== '');
               if (classTopics.length === 0) return null;
 
-              const isExpanded = expandedSections.includes(classification);
-              const selectedInClass = selectedTopics.filter(st => st.classification === classification).length;
+              const isExpanded = expandedSections.includes(folder);
+              const selectedInClass = selectedTopics.filter(st => st.folder === folder).length;
 
               return (
-                <div key={classification} className="border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden">
+                <div key={folder} className="border border-slate-100 dark:border-slate-700 rounded-2xl overflow-hidden">
                   <button 
-                    onClick={() => toggleSection(classification)}
+                    onClick={() => toggleSection(folder)}
                     className="w-full flex items-center justify-between p-4 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <h3 className="text-sm font-black text-slate-600 dark:text-slate-400 uppercase tracking-[0.2em]">
-                        {classification}
+                        {folder}
                       </h3>
                       {selectedInClass > 0 && (
                         <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -340,12 +351,12 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
                     <div className="p-4 bg-white dark:bg-slate-800 animate-in slide-in-from-top-2 duration-200">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {classTopics.map(t => {
-                          const isSelected = selectedTopics.some(st => st.topic === t.topic && st.classification === t.classification);
-                          const selectedData = selectedTopics.find(st => st.topic === t.topic && st.classification === t.classification);
+                          const isSelected = selectedTopics.some(st => st.topic === t.topic && st.folder === t.folder);
+                          const selectedData = selectedTopics.find(st => st.topic === t.topic && st.folder === t.folder);
                           
                           return (
                             <div 
-                              key={`${t.classification}-${t.topic}`}
+                              key={`${t.folder}-${t.topic}`}
                               className={`flex flex-col p-3 border rounded-xl transition-all ${
                                 isSelected 
                                   ? 'bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' 
@@ -357,7 +368,7 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
-                                    onChange={() => toggleTopic(t.topic, t.classification)}
+                                    onChange={() => toggleTopic(t.topic, t.folder)}
                                     className="w-5 h-5 text-indigo-600 rounded-lg border-slate-300 focus:ring-indigo-500 shrink-0"
                                   />
                                   <span className={`text-sm font-bold truncate ${isSelected ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -375,7 +386,7 @@ export function Dashboard({ onStartTest, userId, userRole, permissions, appUser 
                                       min="0"
                                       placeholder="Auto"
                                       value={selectedData?.count || ''}
-                                      onChange={(e) => updateTopicCount(t.topic, t.classification, parseInt(e.target.value) || 0)}
+                                      onChange={(e) => updateTopicCount(t.topic, t.folder, parseInt(e.target.value) || 0)}
                                       className="w-20 px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
                                     />
                                     <span className="text-[10px] text-slate-400 italic whitespace-nowrap">Auto</span>

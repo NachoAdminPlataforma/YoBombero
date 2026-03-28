@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { playNotificationSound } from '../lib/audio';
-import { SavedPrompt } from '../types';
-import { Sparkles, Save, FileText, PenTool, Upload, X, File as FileIcon } from 'lucide-react';
+import { Question, User as AppUser, Feedback, SavedPrompt } from '../types';
+import { Sparkles, Save, FileText, PenTool, Upload, X, File as FileIcon, Lock } from 'lucide-react';
 
 interface QuestionCreatorProps {
   userId: string;
   userRole: 'admin' | 'student';
   permissions: string[];
+  appUser: AppUser;
 }
 
-export function QuestionCreator({ userId, userRole, permissions }: QuestionCreatorProps) {
-  const [activeTab, setActiveTab] = useState<'ai' | 'manual'>('ai');
-  const [topics, setTopics] = useState<{topic: string, classification: string}[]>([]);
+export function QuestionCreator({ userId, userRole, permissions, appUser }: QuestionCreatorProps) {
+  const isAILocked = userRole === 'student' && !appUser.tutorialsCompleted?.creator_manual;
+  const [activeTab, setActiveTab] = useState<'ai' | 'manual'>(isAILocked ? 'manual' : 'ai');
+  const [topics, setTopics] = useState<{topic: string, folder: string}[]>([]);
 
   useEffect(() => {
     const unsubscribe = api.subscribeToTopics(userId, userRole, permissions, (t) => {
@@ -25,15 +27,17 @@ export function QuestionCreator({ userId, userRole, permissions }: QuestionCreat
     <div className="max-w-4xl mx-auto">
       <div className="flex gap-4 mb-8">
         <button
-          onClick={() => setActiveTab('ai')}
+          onClick={() => !isAILocked && setActiveTab('ai')}
+          disabled={isAILocked}
           className={`flex-1 py-4 px-6 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors ${
             activeTab === 'ai' 
               ? 'bg-indigo-600 text-white shadow-md' 
               : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-700'
-          }`}
+          } ${isAILocked ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <Sparkles size={20} />
           Generación con IA
+          {isAILocked && <Lock size={16} className="ml-1" />}
         </button>
         <button
           onClick={() => setActiveTab('manual')}
@@ -49,20 +53,21 @@ export function QuestionCreator({ userId, userRole, permissions }: QuestionCreat
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-        {activeTab === 'ai' ? <AIGenerator userId={userId} userRole={userRole} existingTopics={topics} /> : <ManualCreator userId={userId} userRole={userRole} existingTopics={topics} />}
+        {activeTab === 'ai' ? <AIGenerator userId={userId} userRole={userRole} existingTopics={topics} appUser={appUser} /> : <ManualCreator userId={userId} userRole={userRole} existingTopics={topics} appUser={appUser} />}
       </div>
     </div>
   );
 }
 
-function AIGenerator({ userId, userRole, existingTopics }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, classification: string}[] }) {
+function AIGenerator({ userId, userRole, existingTopics, appUser }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, folder: string}[], appUser: AppUser }) {
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [numQuestions, setNumQuestions] = useState<number | ''>(5);
   const [section, setSection] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
-  const [classification, setClassification] = useState<'Legislativo' | 'Específico'>('Legislativo');
+  const [folder, setFolder] = useState<string>('');
+  const [isNewFolder, setIsNewFolder] = useState(false);
   const [topic, setTopic] = useState('');
   const [isNewTopic, setIsNewTopic] = useState(false);
   
@@ -77,23 +82,67 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
   const [attachedPdf, setAttachedPdf] = useState<any | null>(null);
   const [useAttachedPdf, setUseAttachedPdf] = useState(false);
 
-  const availableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
+  const isTutorial = userRole === 'student' && appUser.tutorialsCompleted?.creator_manual && !appUser.tutorialsCompleted?.creator_ai;
+  const [tutorialStep, setTutorialStep] = useState(1);
 
   useEffect(() => {
-    if (topic && !isNewTopic) {
-      api.getTopicResource(topic, classification).then(setAttachedPdf);
+    if (isTutorial) {
+      if (previewQuestions.length > 0) {
+        setTutorialStep(4);
+      } else if (folder && topic && (text || pdfFile || url || useAttachedPdf) && numQuestions) {
+        setTutorialStep(3);
+      } else if (folder && topic) {
+        setTutorialStep(2);
+      } else {
+        setTutorialStep(1);
+      }
+    }
+  }, [folder, topic, text, pdfFile, url, useAttachedPdf, numQuestions, previewQuestions, isTutorial]);
+
+  const availableFolders = Array.from(new Set(existingTopics.map(t => t.folder)));
+  const availableTopics = existingTopics.filter(t => t.folder === folder && t.topic !== '').map(t => t.topic);
+
+  const handleCreateEmptyFolder = async () => {
+    if (!folder.trim()) return;
+    setLoading(true);
+    await api.createFolder(folder.trim(), userId);
+    setSuccessMsg(`Carpeta "${folder}" creada correctamente`);
+    setIsNewFolder(false);
+    setLoading(false);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleCreateEmptyTopic = async () => {
+    if (!topic.trim() || !folder) return;
+    setLoading(true);
+    await api.createTopic(topic.trim(), folder, userId);
+    setSuccessMsg(`Tema "${topic}" creado correctamente en "${folder}"`);
+    setIsNewTopic(false);
+    setLoading(false);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  useEffect(() => {
+    if (!isNewFolder && availableFolders.length > 0 && !availableFolders.includes(folder)) {
+      setFolder(availableFolders[0]);
+    }
+  }, [existingTopics, isNewFolder, folder]);
+
+  useEffect(() => {
+    if (topic && !isNewTopic && folder && !isNewFolder) {
+      api.getTopicResource(topic, folder).then(setAttachedPdf);
     } else {
       setAttachedPdf(null);
       setUseAttachedPdf(false);
     }
-  }, [topic, classification, isNewTopic]);
+  }, [topic, folder, isNewTopic, isNewFolder]);
 
   useEffect(() => {
-    const currentAvailableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
+    const currentAvailableTopics = existingTopics.filter(t => t.folder === folder).map(t => t.topic);
     if (!isNewTopic && currentAvailableTopics.length > 0 && !currentAvailableTopics.includes(topic)) {
       setTopic(currentAvailableTopics[0] || '');
     }
-  }, [classification, existingTopics, isNewTopic, topic]);
+  }, [folder, existingTopics, isNewTopic, topic]);
 
   useEffect(() => {
     loadPrompts();
@@ -148,10 +197,10 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
         fileData = { data: base64, mimeType: pdfFile.type };
       }
 
-      const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
+      const existingQuestions = await api.getQuestionsByTopic(userId, topic, folder, userRole);
 
       const questions = await api.generateAIQuestions({
-        text: extraText, url, numQuestions: finalNumQuestions, section, customPrompt, classification, topic, fileData, existingQuestions: existingQuestions
+        text: extraText, url, numQuestions: finalNumQuestions, section, customPrompt, folder, topic, fileData, existingQuestions: existingQuestions
       });
       setPreviewQuestions(questions);
       setSuccessMsg(`¡Se generaron ${questions.length} preguntas! Revísalas abajo antes de guardar.`);
@@ -172,7 +221,7 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
     if (previewQuestions.length === 0) return;
     setLoading(true);
     try {
-      const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
+      const existingQuestions = await api.getQuestionsByTopic(userId, topic, folder, userRole);
       
       const uniqueQuestions = previewQuestions.filter(newQ => {
         const cleanNewText = newQ.text.trim().toLowerCase().replace(/[.,;:?¿!¡]/g, '');
@@ -193,21 +242,26 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
       }
 
       const sourcePdfName = pdfFile ? pdfFile.name : undefined;
-      await api.saveBulkQuestions(userId, uniqueQuestions, classification, topic, sourcePdfName);
+      await api.saveBulkQuestions(userId, uniqueQuestions, folder, topic, sourcePdfName);
       
-      let msg = `¡Se guardaron ${uniqueQuestions.length} preguntas exitosamente!`;
-      if (duplicatesCount > 0) {
-        msg += ` (${duplicatesCount} preguntas duplicadas fueron omitidas).`;
+      if (isTutorial) {
+        await api.updateUserTutorials(userId, { creator_ai: true });
+        setSuccessMsg('¡Enhorabuena! Has completado el tutorial de generación con IA. Ahora se ha desbloqueado la Base de Datos.');
+      } else {
+        let msg = `¡Se guardaron ${uniqueQuestions.length} preguntas exitosamente!`;
+        if (duplicatesCount > 0) {
+          msg += ` (${duplicatesCount} preguntas duplicadas fueron omitidas).`;
+        }
+        setSuccessMsg(msg);
       }
       
-      setSuccessMsg(msg);
       setPreviewQuestions([]);
       setText('');
       setPdfFile(null);
       setNumQuestions(5);
       setSection('');
       setCustomPrompt('');
-      // We keep classification and topic as they might want to generate more for the same topic
+      // We keep folder and topic as they might want to generate more for the same topic
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -250,17 +304,63 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
 
   return (
     <div className="space-y-6">
+      {isTutorial && (
+        <div className="bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500 p-4 mb-6 rounded-r-lg">
+          <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-300 mb-2">Tutorial: Generación con IA</h3>
+          <p className="text-indigo-700 dark:text-indigo-400 text-sm">
+            {tutorialStep === 1 && "Paso 1: Selecciona la carpeta y el tema donde quieres guardar las preguntas generadas."}
+            {tutorialStep === 2 && "Paso 2: Proporciona el contenido base. Puedes subir un PDF, pegar un texto, introducir una URL, o usar el PDF adjunto del tema si lo hay."}
+            {tutorialStep === 3 && "Paso 3: Ajusta el número de preguntas, añade indicaciones específicas si quieres, y haz clic en 'Generar Preguntas para Revisar'."}
+            {tutorialStep === 4 && "Paso 4: Revisa las preguntas generadas, edítalas si es necesario, y haz clic en 'Confirmar y Guardar todas las preguntas'."}
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Clasificación</label>
-          <select 
-            value={classification} 
-            onChange={(e) => setClassification(e.target.value as any)}
-            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-          >
-            <option value="Legislativo">Legislativo</option>
-            <option value="Específico">Específico</option>
-          </select>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Carpeta</label>
+          {!isNewFolder && availableFolders.length > 0 ? (
+            <div className="flex gap-2">
+              <select 
+                value={folder} 
+                onChange={(e) => setFolder(e.target.value)}
+                className="flex-1 min-w-0 truncate px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="" disabled>Selecciona una carpeta...</option>
+                {availableFolders.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <button 
+                onClick={() => { setIsNewFolder(true); setFolder(''); }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors"
+              >
+                Nueva
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={folder} 
+                onChange={(e) => setFolder(e.target.value)}
+                className="flex-1 min-w-0 px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Nombre de la nueva carpeta"
+              />
+              <button 
+                onClick={handleCreateEmptyFolder}
+                disabled={!folder.trim() || loading}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg transition-colors"
+              >
+                Crear
+              </button>
+              {availableFolders.length > 0 && (
+                <button 
+                  onClick={() => { setIsNewFolder(false); setFolder(''); }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Tema</label>
@@ -290,6 +390,13 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
                 className="flex-1 min-w-0 px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Nombre del nuevo tema"
               />
+              <button 
+                onClick={handleCreateEmptyTopic}
+                disabled={!topic.trim() || !folder || loading}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg transition-colors"
+              >
+                Crear
+              </button>
               {availableTopics.length > 0 && (
                 <button 
                   onClick={() => { setIsNewTopic(false); setTopic(''); }}
@@ -548,24 +655,69 @@ function AIGenerator({ userId, userRole, existingTopics }: { userId: string, use
   );
 }
 
-function ManualCreator({ userId, userRole, existingTopics }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, classification: string}[] }) {
+function ManualCreator({ userId, userRole, existingTopics, appUser }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, folder: string}[], appUser: AppUser }) {
   const [text, setText] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctIndex, setCorrectIndex] = useState(0);
-  const [classification, setClassification] = useState<'Legislativo' | 'Específico'>('Legislativo');
+  const [folder, setFolder] = useState<string>('');
+  const [isNewFolder, setIsNewFolder] = useState(false);
   const [topic, setTopic] = useState('');
   const [isNewTopic, setIsNewTopic] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const availableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
+  const isTutorial = userRole === 'student' && !appUser.tutorialsCompleted?.creator_manual;
+  const [tutorialStep, setTutorialStep] = useState(1);
 
   useEffect(() => {
-    const currentAvailableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
+    if (isTutorial) {
+      if (folder && topic && text && options[0]) {
+        setTutorialStep(4);
+      } else if (folder && topic) {
+        setTutorialStep(3);
+      } else if (folder) {
+        setTutorialStep(2);
+      } else {
+        setTutorialStep(1);
+      }
+    }
+  }, [folder, topic, text, options, isTutorial]);
+
+  const availableFolders = Array.from(new Set(existingTopics.map(t => t.folder)));
+  const availableTopics = existingTopics.filter(t => t.folder === folder && t.topic !== '').map(t => t.topic);
+
+  const handleCreateEmptyFolder = async () => {
+    if (!folder.trim()) return;
+    setLoading(true);
+    await api.createFolder(folder.trim(), userId);
+    setSuccessMsg(`Carpeta "${folder}" creada correctamente`);
+    setIsNewFolder(false);
+    setLoading(false);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleCreateEmptyTopic = async () => {
+    if (!topic.trim() || !folder) return;
+    setLoading(true);
+    await api.createTopic(topic.trim(), folder, userId);
+    setSuccessMsg(`Tema "${topic}" creado correctamente en "${folder}"`);
+    setIsNewTopic(false);
+    setLoading(false);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  useEffect(() => {
+    if (!isNewFolder && availableFolders.length > 0 && !availableFolders.includes(folder)) {
+      setFolder(availableFolders[0]);
+    }
+  }, [existingTopics, isNewFolder, folder]);
+
+  useEffect(() => {
+    const currentAvailableTopics = existingTopics.filter(t => t.folder === folder).map(t => t.topic);
     if (!isNewTopic && currentAvailableTopics.length > 0 && !currentAvailableTopics.includes(topic)) {
       setTopic(currentAvailableTopics[0] || '');
     }
-  }, [classification, existingTopics, isNewTopic, topic]);
+  }, [folder, existingTopics, isNewTopic, topic]);
 
   const handleSave = async () => {
     if (!text || !topic || options.some(o => !o)) {
@@ -575,7 +727,7 @@ function ManualCreator({ userId, userRole, existingTopics }: { userId: string, u
     
     setLoading(true);
     try {
-      const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
+      const existingQuestions = await api.getQuestionsByTopic(userId, topic, folder, userRole);
       const cleanNewText = text.trim().toLowerCase().replace(/[.,;:?¿!¡]/g, '');
       const isDuplicate = existingQuestions.some(existingQ => {
         const cleanExistingText = existingQ.text.trim().toLowerCase().replace(/[.,;:?¿!¡]/g, '');
@@ -594,10 +746,17 @@ function ManualCreator({ userId, userRole, existingTopics }: { userId: string, u
         text,
         options,
         correctOptionIndex: correctIndex,
-        classification,
+        folder,
         topic
       });
-      setSuccessMsg('Pregunta guardada exitosamente.');
+      
+      if (isTutorial) {
+        await api.updateUserTutorials(userId, { creator_manual: true });
+        setSuccessMsg('¡Enhorabuena! Has completado el tutorial de creación manual. Ahora se ha desbloqueado la generación con IA.');
+      } else {
+        setSuccessMsg('Pregunta guardada exitosamente.');
+      }
+      
       setText('');
       setOptions(['', '', '', '']);
       setTimeout(() => setSuccessMsg(''), 3000);
@@ -611,17 +770,63 @@ function ManualCreator({ userId, userRole, existingTopics }: { userId: string, u
 
   return (
     <div className="space-y-6">
+      {isTutorial && (
+        <div className="bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-500 p-4 mb-6 rounded-r-lg">
+          <h3 className="text-lg font-bold text-indigo-800 dark:text-indigo-300 mb-2">Tutorial: Creación Manual</h3>
+          <p className="text-indigo-700 dark:text-indigo-400 text-sm">
+            {tutorialStep === 1 && "Paso 1: Crea una nueva carpeta para organizar tus preguntas. Te recomendamos llamarla 'prueba'."}
+            {tutorialStep === 2 && "Paso 2: Ahora crea un nuevo tema dentro de la carpeta. Te recomendamos llamarlo 'prueba'."}
+            {tutorialStep === 3 && "Paso 3: Escribe el enunciado de tu pregunta y rellena las opciones de respuesta. No olvides marcar cuál es la correcta."}
+            {tutorialStep === 4 && "Paso 4: ¡Perfecto! Ahora haz clic en 'Guardar Pregunta Manual' para terminar."}
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Clasificación</label>
-          <select 
-            value={classification} 
-            onChange={(e) => setClassification(e.target.value as any)}
-            className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
-          >
-            <option value="Legislativo">Legislativo</option>
-            <option value="Específico">Específico</option>
-          </select>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Carpeta</label>
+          {!isNewFolder && availableFolders.length > 0 ? (
+            <div className="flex gap-2">
+              <select 
+                value={folder} 
+                onChange={(e) => setFolder(e.target.value)}
+                className="flex-1 min-w-0 truncate px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
+              >
+                <option value="" disabled>Selecciona una carpeta...</option>
+                {availableFolders.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <button 
+                onClick={() => { setIsNewFolder(true); setFolder(''); }}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-lg transition-colors"
+              >
+                Nueva
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={folder} 
+                onChange={(e) => setFolder(e.target.value)}
+                className="flex-1 min-w-0 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
+                placeholder="Nombre de la nueva carpeta"
+              />
+              <button 
+                onClick={handleCreateEmptyFolder}
+                disabled={!folder.trim() || loading}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg transition-colors"
+              >
+                Crear
+              </button>
+              {availableFolders.length > 0 && (
+                <button 
+                  onClick={() => { setIsNewFolder(false); setFolder(''); }}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tema</label>
@@ -651,6 +856,13 @@ function ManualCreator({ userId, userRole, existingTopics }: { userId: string, u
                 className="flex-1 min-w-0 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
                 placeholder="Nombre del nuevo tema"
               />
+              <button 
+                onClick={handleCreateEmptyTopic}
+                disabled={!topic.trim() || !folder || loading}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg transition-colors"
+              >
+                Crear
+              </button>
               {availableTopics.length > 0 && (
                 <button 
                   onClick={() => { setIsNewTopic(false); setTopic(''); }}

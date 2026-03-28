@@ -11,7 +11,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { FeedbackSection } from './components/FeedbackSection';
 import { Question, User as AppUser, Feedback } from './types';
-import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock, Heart, Shield, Settings, UserCircle, Wrench } from 'lucide-react';
+import { BookOpen, PlusCircle, LayoutDashboard, Database, History, Zap, Menu, X, Moon, Sun, Search, MessageSquare, LogOut, LogIn, ShieldCheck, GraduationCap, Clock, Heart, Shield, Settings, UserCircle, Wrench, Lock } from 'lucide-react';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -68,6 +68,7 @@ export default function App() {
               displayName: firebaseUser.displayName || '',
               photoURL: firebaseUser.photoURL || '',
               permissions: [],
+              tutorialsCompleted: {},
             };
             
             if (!isDefaultAdmin) {
@@ -90,23 +91,25 @@ export default function App() {
     return () => unsubscribe();
   }, [localSessionId]);
 
-  // Listen for session conflicts
+  // Listen for session conflicts and user updates
   useEffect(() => {
-    if (!user || !appUser || appUser.role === 'admin') return;
+    if (!user) return;
 
     const userRef = doc(db, 'users', user.uid);
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as AppUser;
-        if (data.sessionId && data.sessionId !== localSessionId) {
+        if (data.role !== 'admin' && data.sessionId && data.sessionId !== localSessionId) {
           setSessionConflict(true);
           handleLogout();
+        } else {
+          setAppUser(data);
         }
       }
     });
 
     return () => unsubscribe();
-  }, [user, appUser, localSessionId]);
+  }, [user, localSessionId]);
 
   useEffect(() => {
     console.log('Dark mode changed:', isDarkMode);
@@ -121,6 +124,33 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  const isSectionLocked = (section: string) => {
+    if (appUser?.role === 'admin') return false;
+    const tutorials = appUser?.tutorialsCompleted || {};
+    
+    switch (section) {
+      case 'create':
+        return false;
+      case 'database':
+        return !tutorials.creator_ai;
+      case 'dashboard':
+      case 'shortcuts':
+      case 'history':
+      case 'feedback':
+        return !tutorials[section];
+      default:
+        return false;
+    }
+  };
+
+  useEffect(() => {
+    if (appUser && appUser.role === 'student') {
+      if (isSectionLocked(currentView)) {
+        setCurrentView('create');
+      }
+    }
+  }, [appUser, currentView]);
 
   const handleStartTest = (questions: Question[]) => {
     setTestQuestions(questions);
@@ -349,32 +379,36 @@ export default function App() {
               {/* Desktop Navigation */}
               <nav className="hidden lg:flex gap-1 items-center">
                 <button 
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'dashboard' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => !isSectionLocked('dashboard') && setCurrentView('dashboard')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${isSectionLocked('dashboard') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'dashboard' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <LayoutDashboard size={18} />
                   Test
+                  {isSectionLocked('dashboard') && <Lock size={14} className="ml-1" />}
                 </button>
                 <button 
-                  onClick={() => setCurrentView('shortcuts')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'shortcuts' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => !isSectionLocked('shortcuts') && setCurrentView('shortcuts')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${isSectionLocked('shortcuts') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'shortcuts' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <Wrench size={18} />
                   Herramientas
+                  {isSectionLocked('shortcuts') && <Lock size={14} className="ml-1" />}
                 </button>
                 <button 
-                  onClick={() => setCurrentView('create')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'create' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => !isSectionLocked('create') && setCurrentView('create')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${isSectionLocked('create') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'create' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <PlusCircle size={18} />
                   Crear Preguntas
+                  {isSectionLocked('create') && <Lock size={14} className="ml-1" />}
                 </button>
                 <button 
-                  onClick={() => setCurrentView('database')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'database' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => !isSectionLocked('database') && setCurrentView('database')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${isSectionLocked('database') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'database' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <Database size={18} />
                   Base de Datos
+                  {isSectionLocked('database') && <Lock size={14} className="ml-1" />}
                 </button>
                 {appUser?.role === 'admin' && (
                   <button 
@@ -386,11 +420,12 @@ export default function App() {
                   </button>
                 )}
                 <button 
-                  onClick={() => setCurrentView('history')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${currentView === 'history' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => !isSectionLocked('history') && setCurrentView('history')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors whitespace-nowrap ${isSectionLocked('history') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'history' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <History size={18} />
                   Historial
+                  {isSectionLocked('history') && <Lock size={14} className="ml-1" />}
                 </button>
 
 
@@ -453,13 +488,16 @@ export default function App() {
                         {appUser?.role !== 'admin' && (
                           <button 
                             onClick={() => {
-                              setIsProfileMenuOpen(false);
-                              setCurrentView('feedback');
+                              if (!isSectionLocked('feedback')) {
+                                setIsProfileMenuOpen(false);
+                                setCurrentView('feedback');
+                              }
                             }}
-                            className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                            className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 ${isSectionLocked('feedback') ? 'opacity-50 cursor-not-allowed text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                           >
                             <MessageSquare size={16} />
                             Sugerencias
+                            {isSectionLocked('feedback') && <Lock size={14} className="ml-auto" />}
                           </button>
                         )}
 
@@ -522,32 +560,36 @@ export default function App() {
               {/* Menu Content */}
               <nav className="absolute top-16 left-0 right-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 space-y-2 shadow-xl animate-in slide-in-from-top duration-200">
                 <button 
-                  onClick={() => { setCurrentView('dashboard'); setIsMenuOpen(false); }}
-                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'dashboard' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => { if (!isSectionLocked('dashboard')) { setCurrentView('dashboard'); setIsMenuOpen(false); } }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${isSectionLocked('dashboard') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'dashboard' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <LayoutDashboard size={20} />
                   Test
+                  {isSectionLocked('dashboard') && <Lock size={16} className="ml-auto" />}
                 </button>
                 <button 
-                  onClick={() => { setCurrentView('shortcuts'); setIsMenuOpen(false); }}
-                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'shortcuts' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => { if (!isSectionLocked('shortcuts')) { setCurrentView('shortcuts'); setIsMenuOpen(false); } }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${isSectionLocked('shortcuts') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'shortcuts' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <Wrench size={20} />
                   Herramientas
+                  {isSectionLocked('shortcuts') && <Lock size={16} className="ml-auto" />}
                 </button>
                 <button 
-                  onClick={() => { setCurrentView('create'); setIsMenuOpen(false); }}
-                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'create' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => { if (!isSectionLocked('create')) { setCurrentView('create'); setIsMenuOpen(false); } }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${isSectionLocked('create') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'create' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <PlusCircle size={20} />
                   Crear Preguntas
+                  {isSectionLocked('create') && <Lock size={16} className="ml-auto" />}
                 </button>
                 <button 
-                  onClick={() => { setCurrentView('database'); setIsMenuOpen(false); }}
-                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'database' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => { if (!isSectionLocked('database')) { setCurrentView('database'); setIsMenuOpen(false); } }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${isSectionLocked('database') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'database' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <Database size={20} />
                   Base de Datos
+                  {isSectionLocked('database') && <Lock size={16} className="ml-auto" />}
                 </button>
                 {appUser?.role === 'admin' && (
                   <button 
@@ -559,19 +601,21 @@ export default function App() {
                   </button>
                 )}
                 <button 
-                  onClick={() => { setCurrentView('history'); setIsMenuOpen(false); }}
-                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'history' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                  onClick={() => { if (!isSectionLocked('history')) { setCurrentView('history'); setIsMenuOpen(false); } }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${isSectionLocked('history') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'history' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
                   <History size={20} />
                   Historial
+                  {isSectionLocked('history') && <Lock size={16} className="ml-auto" />}
                 </button>
                 {appUser?.role !== 'admin' && (
                   <button 
-                    onClick={() => { setCurrentView('feedback'); setIsMenuOpen(false); }}
-                    className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${currentView === 'feedback' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                    onClick={() => { if (!isSectionLocked('feedback')) { setCurrentView('feedback'); setIsMenuOpen(false); } }}
+                    className={`w-full px-4 py-3 rounded-xl text-base font-medium flex items-center gap-3 transition-colors ${isSectionLocked('feedback') ? 'opacity-50 cursor-not-allowed' : ''} ${currentView === 'feedback' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                   >
                     <MessageSquare size={20} />
                     Sugerencias
+                    {isSectionLocked('feedback') && <Lock size={16} className="ml-auto" />}
                   </button>
                 )}
                 
@@ -631,6 +675,7 @@ export default function App() {
             userId={user.uid}
             userRole={appUser?.role || 'student'} 
             permissions={appUser?.permissions || []} 
+            appUser={appUser!}
           />
         </div>
         <div className={currentView === 'database' ? 'block' : 'hidden'}>

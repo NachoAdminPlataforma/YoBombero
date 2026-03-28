@@ -32,7 +32,7 @@ export interface Question {
   text: string;
   options: string[];
   correctOptionIndex: number;
-  classification: 'Legislativo' | 'Específico';
+  folder: string;
   topic: string;
   hits: number;
   misses: number;
@@ -88,10 +88,17 @@ export interface TestSession {
   topicStats?: TopicStats[];
 }
 
+export interface Folder {
+  id: string;
+  name: string;
+  topics: string[];
+  userId: string;
+}
+
 export interface TopicResource {
   id: string;
   topic: string;
-  classification: string;
+  folder: string;
   fileName: string;
   fileContent?: string; // Base64
   extractedText?: string;

@@ -304,7 +304,7 @@ export function AdminPanel({ userId }: AdminPanelProps) {
                       text: "Ejemplo de pregunta",
                       options: ["Opción A", "Opción B", "Opción C", "Opción D"],
                       correctOptionIndex: 0,
-                      classification: "Legislativo",
+                      folder: "Legislativo",
                       topic: "Tema 1"
                     }];
                     const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });

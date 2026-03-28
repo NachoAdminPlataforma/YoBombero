@@ -23,7 +23,7 @@ export function LegislationAnalyzer({ userId, userRole, permissions, appUser }: 
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [topics, setTopics] = useState<{topic: string, classification: string}[]>([]);
+  const [topics, setTopics] = useState<{topic: string, folder: string}[]>([]);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [selectedClassification, setSelectedClassification] = useState('Legislativo');
   const [attachedPdf, setAttachedPdf] = useState<any | null>(null);
@@ -229,7 +229,7 @@ Formato de salida obligatorio:
               className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
             >
               <option value="">Selecciona un tema...</option>
-              {topics.filter(t => t.classification === selectedClassification).map(t => (
+              {topics.filter(t => t.folder === selectedClassification && t.topic !== '').map(t => (
                 <option key={t.topic} value={t.topic}>{t.topic}</option>
               ))}
             </select>
