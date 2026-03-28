@@ -290,6 +290,9 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
     }
   }, [currentPath]);
 
+  const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void}>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
   const extractTextFromPDF = async (file: File): Promise<string> => {
     // Dynamically import pdfjs-dist to prevent Vite build/load errors
     const pdfjsLib = await import('pdfjs-dist');
@@ -334,17 +337,26 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       setUploadingPdf(false);
     } catch (error) {
       console.error("Error uploading PDF:", error);
-      alert("Error al procesar el PDF. Asegúrate de que no esté protegido.");
+      setAlertModal({
+        isOpen: true,
+        title: 'Error de PDF',
+        message: 'Error al procesar el PDF. Asegúrate de que no esté protegido.'
+      });
       setUploadingPdf(false);
     }
   };
 
   const handleDeleteResource = async () => {
     if (!topicResource) return;
-    if (confirm('¿Estás seguro de que quieres eliminar el PDF adjunto a este tema?')) {
-      await api.deleteTopicResource(topicResource.id);
-      setTopicResource(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar PDF',
+      message: '¿Estás seguro de que quieres eliminar el PDF adjunto a este tema?',
+      onConfirm: async () => {
+        await api.deleteTopicResource(topicResource.id);
+        setTopicResource(null);
+      }
+    });
   };
 
   useEffect(() => {
@@ -503,7 +515,11 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       }
     } catch (error) {
       console.error("Error deleting question(s):", error);
-      alert("Hubo un error al eliminar.");
+      setAlertModal({
+        isOpen: true,
+        title: 'Error al eliminar',
+        message: 'Hubo un error al eliminar las preguntas.'
+      });
     } finally {
       setLoading(false);
       setDeleteConfirmation({ isOpen: false, isBulk: false });
@@ -683,16 +699,26 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
 
   const handleDeleteFolder = async (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('¿Estás seguro de que quieres eliminar esta carpeta?')) {
-      await api.deleteFolder(folderId);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Carpeta',
+      message: '¿Estás seguro de que quieres eliminar esta carpeta? Se eliminarán también todos sus temas.',
+      onConfirm: async () => {
+        await api.deleteFolder(folderId);
+      }
+    });
   };
 
   const handleDeleteTopic = async (topicId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('¿Estás seguro de que quieres eliminar este tema?')) {
-      await api.deleteTopic(topicId);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Tema',
+      message: '¿Estás seguro de que quieres eliminar este tema?',
+      onConfirm: async () => {
+        await api.deleteTopic(topicId);
+      }
+    });
   };
 
   // View rendering logic
@@ -1432,6 +1458,54 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                   Sí, eliminar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Alert Modal */}
+      {alertModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{alertModal.title}</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{alertModal.message}</p>
+            <button 
+              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
+              className="w-full bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Trash2 size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{confirmModal.title}</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{confirmModal.message}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-xl transition-all"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal({ ...confirmModal, isOpen: false });
+                }}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-rose-200 dark:shadow-none"
+              >
+                Confirmar
+              </button>
             </div>
           </div>
         </div>

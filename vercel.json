@@ -19,7 +19,7 @@
       "destination": "/server.ts"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|assets/|favicon.ico|sw.js|manifest.json|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]

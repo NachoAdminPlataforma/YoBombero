@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { playNotificationSound } from '../lib/audio';
 import { SavedPrompt, Folder as FolderType, Topic as TopicType } from '../types';
-import { Folder, Sparkles, Save, FileText, PenTool, Upload, X, File as FileIcon, Lock, Unlock, Plus } from 'lucide-react';
+import { Folder, Sparkles, Save, FileText, PenTool, Upload, X, File as FileIcon, Lock, Unlock, Plus, AlertTriangle } from 'lucide-react';
 
 interface QuestionCreatorProps {
   userId: string;
@@ -88,6 +88,8 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
   const [attachedPdf, setAttachedPdf] = useState<any | null>(null);
   const [useAttachedPdf, setUseAttachedPdf] = useState(false);
 
+  const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
+
   useEffect(() => {
     if (classification) {
       const folder = folders.find(f => f.name === classification);
@@ -152,11 +154,19 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
 
   const handleGenerate = async () => {
     if (!text && !pdfFile && !url && !useAttachedPdf) {
-      alert('Debes proporcionar un texto base, subir un archivo PDF, introducir una URL o usar el PDF adjunto del tema.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Campos incompletos',
+        message: 'Debes proporcionar un texto base, subir un archivo PDF, introducir una URL o usar el PDF adjunto del tema.'
+      });
       return;
     }
     if (!topic) {
-      alert('El tema es obligatorio.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Tema obligatorio',
+        message: 'El tema es obligatorio.'
+      });
       return;
     }
     const finalNumQuestions = typeof numQuestions === 'number' && numQuestions > 0 ? numQuestions : 5;
@@ -184,15 +194,33 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       const questions = await api.generateAIQuestions({
         text: extraText, url, numQuestions: finalNumQuestions, section, customPrompt, classification, topic, fileData, existingQuestions: existingQuestions
       });
+      
+      if (questions.length === 0) {
+        setAlertModal({
+          isOpen: true,
+          title: 'Sin preguntas nuevas',
+          message: 'Todas las preguntas generadas ya existen en la base de datos para este tema.'
+        });
+        return;
+      }
+
       setPreviewQuestions(questions);
       setSuccessMsg(`¡Se generaron ${questions.length} preguntas! Revísalas abajo antes de guardar.`);
       playNotificationSound();
     } catch (e: any) {
       console.error(e);
       if (e.message?.toLowerCase().includes('quota') || e.message?.toLowerCase().includes('limit')) {
-        alert('Has excedido el límite de uso de la IA gratuita. El modelo principal permite 2 peticiones por minuto y el secundario 15. Por favor, espera un minuto e inténtalo de nuevo. Si el problema persiste, es posible que hayas alcanzado el límite diario (50-1500 peticiones).');
+        setAlertModal({
+          isOpen: true,
+          title: 'Límite excedido',
+          message: 'Has excedido el límite de uso de la IA gratuita. El modelo principal permite 2 peticiones por minuto y el secundario 15. Por favor, espera un minuto e inténtalo de nuevo. Si el problema persiste, es posible que hayas alcanzado el límite diario (50-1500 peticiones).'
+        });
       } else {
-        alert(`Error al generar preguntas: ${e.message || 'Error desconocido'}. Si usas un PDF, asegúrate de que no sea demasiado grande.`);
+        setAlertModal({
+          isOpen: true,
+          title: 'Error de generación',
+          message: `Error al generar preguntas: ${e.message || 'Error desconocido'}. Si usas un PDF, asegúrate de que no sea demasiado grande.`
+        });
       }
     } finally {
       setLoading(false);
@@ -218,7 +246,11 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       const duplicatesCount = previewQuestions.length - uniqueQuestions.length;
 
       if (uniqueQuestions.length === 0) {
-        alert('Todas las preguntas generadas ya existen en la base de datos para este tema.');
+        setAlertModal({
+          isOpen: true,
+          title: 'Preguntas duplicadas',
+          message: 'Todas las preguntas generadas ya existen en la base de datos para este tema.'
+        });
         setLoading(false);
         return;
       }
@@ -251,7 +283,11 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
       console.error(e);
-      alert('Error al guardar las preguntas.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error al guardar',
+        message: 'Error al guardar las preguntas.'
+      });
     } finally {
       setLoading(false);
     }
@@ -281,7 +317,11 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       if (file.type === 'application/pdf') {
         setPdfFile(file);
       } else {
-        alert('Por favor, sube un archivo PDF válido.');
+        setAlertModal({
+          isOpen: true,
+          title: 'Archivo inválido',
+          message: 'Por favor, sube un archivo PDF válido.'
+        });
       }
     }
   };
@@ -592,6 +632,25 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
           </div>
         </div>
       )}
+
+      {/* Alert Modal */}
+      {alertModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle size={32} className="text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{alertModal.title}</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{alertModal.message}</p>
+            <button 
+              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
+              className="w-full bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -606,6 +665,8 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
   const [isNewTopic, setIsNewTopic] = useState(false);
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
 
   useEffect(() => {
     if (classification) {
@@ -635,7 +696,11 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
 
   const handleSave = async () => {
     if (!text || !topic || options.some(o => !o)) {
-      alert('Rellena todos los campos.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Campos incompletos',
+        message: 'Rellena todos los campos.'
+      });
       return;
     }
     
@@ -658,7 +723,11 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
       });
 
       if (isDuplicate) {
-        alert('Esta pregunta con estas mismas respuestas ya existe en la base de datos para este tema.');
+        setAlertModal({
+          isOpen: true,
+          title: 'Pregunta duplicada',
+          message: 'Esta pregunta con estas mismas respuestas ya existe en la base de datos para este tema.'
+        });
         setLoading(false);
         return;
       }
@@ -676,7 +745,11 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
       console.error(e);
-      alert('Error al guardar la pregunta.');
+      setAlertModal({
+        isOpen: true,
+        title: 'Error al guardar',
+        message: 'Error al guardar la pregunta.'
+      });
     } finally {
       setLoading(false);
     }
@@ -785,6 +858,25 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
       {successMsg && (
         <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-center font-medium border border-emerald-100 dark:border-emerald-800">
           {successMsg}
+        </div>
+      )}
+
+      {/* Alert Modal */}
+      {alertModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle size={32} className="text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{alertModal.title}</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{alertModal.message}</p>
+            <button 
+              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
+              className="w-full bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all"
+            >
+              Entendido
+            </button>
+          </div>
         </div>
       )}
     </div>
