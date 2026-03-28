@@ -22,7 +22,7 @@ service cloud.firestore {
     //   - text: string (required)
     //   - options: list (required, 4 strings)
     //   - correctOptionIndex: number (required, 0-3)
-    //   - folder: string (required)
+    //   - classification: string (required)
     //   - topic: string (required)
     //   - createdAt: timestamp (required)
     //   - sourcePdf: string (optional)
@@ -61,26 +61,11 @@ service cloud.firestore {
     //   - incorrectCount: number (required)
     //   - score: number (required)
     //
-    // Collection: folders
-    // Document ID: folderId (random)
-    // Fields:
-    //   - name: string (required)
-    //   - userId: string (optional)
-    //   - createdAt: timestamp (required)
-    //
-    // Collection: topics
-    // Document ID: topicId (random)
-    // Fields:
-    //   - name: string (required)
-    //   - folder: string (required)
-    //   - userId: string (optional)
-    //   - createdAt: timestamp (required)
-    //
     // Collection: topic_resources
     // Document ID: resourceId (random)
     // Fields:
     //   - topic: string (required)
-    //   - folder: string (required)
+    //   - classification: string (required)
     //   - fileName: string (required)
     //   - extractedText: string (required)
     //   - createdAt: timestamp (required)
@@ -91,8 +76,25 @@ service cloud.firestore {
     //
     // ===============================================================
 
+    // Collection: saved_prompts
+    // Document ID: promptId (random)
+    // Fields:
+    //   - title: string (required)
+    //   - prompt: string (required)
+    //   - userId: string (required)
+    //   - isAdminPrompt: bool (optional)
+    //   - topic: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: prompt_access
+    // Document ID: userId_promptId
+    // Fields:
+    //   - userId: string (required)
+    //   - promptId: string (required)
+    //   - granted: bool (required)
+    //   - grantedAt: timestamp (optional)
+    //
     // ===============================================================
-    // Helper Functions
     // ===============================================================
     
     function isAuthenticated() {
@@ -172,11 +174,11 @@ service cloud.firestore {
     }
 
     function isValidQuestion(data) {
-      return hasRequiredFields(['text', 'options', 'correctOptionIndex', 'folder', 'topic']) &&
+      return hasRequiredFields(['text', 'options', 'correctOptionIndex', 'classification', 'topic']) &&
              data.text is string && data.text.size() > 0 && data.text.size() < 10000 &&
              data.options is list && data.options.size() >= 2 && data.options.size() <= 10 &&
              data.correctOptionIndex is int && data.correctOptionIndex >= 0 &&
-             data.folder is string && data.topic is string &&
+             data.classification is string && data.topic is string &&
              (!('userId' in data) || data.userId is string) &&
              (!('displayId' in data) || data.displayId is int) &&
              (!('hits' in data) || data.hits is int) &&
@@ -212,6 +214,24 @@ service cloud.firestore {
              isValidDateString(data.reviewedAt);
     }
 
+    function isValidSavedPrompt(data) {
+      return hasRequiredFields(['title', 'prompt', 'userId', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.prompt is string && data.prompt.size() > 0 && data.prompt.size() < 10000 &&
+             data.userId is string &&
+             isValidDateString(data.createdAt) &&
+             (!('isAdminPrompt' in data) || data.isAdminPrompt is bool) &&
+             (!('topic' in data) || data.topic is string);
+    }
+
+    function isValidPromptAccess(data) {
+      return hasRequiredFields(['userId', 'promptId', 'granted']) &&
+             data.userId is string &&
+             data.promptId is string &&
+             data.granted is bool &&
+             (!('grantedAt' in data) || isValidDateString(data.grantedAt));
+    }
+
     function isValidTestSession(data) {
       return hasRequiredFields(['userId', 'completedAt', 'topics', 'totalQuestions', 'correctCount', 'incorrectCount', 'score']) &&
              data.userId == request.auth.uid &&
@@ -221,21 +241,6 @@ service cloud.firestore {
              data.correctCount is int &&
              data.incorrectCount is int &&
              data.score is number;
-    }
-
-    function isValidFolder(data) {
-      return hasRequiredFields(['name', 'createdAt']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             (!('userId' in data) || data.userId is string) &&
-             isValidDateString(data.createdAt);
-    }
-
-    function isValidTopic(data) {
-      return hasRequiredFields(['name', 'folder', 'createdAt']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.folder is string && data.folder.size() > 0 && data.folder.size() < 100 &&
-             (!('userId' in data) || data.userId is string) &&
-             isValidDateString(data.createdAt);
     }
 
     // ===============================================================
@@ -296,20 +301,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /folders/{folderId} {
-      allow read: if isAuthorized();
-      allow create: if isAuthorized() && isValidFolder(request.resource.data) && (isAdmin() || request.resource.data.userId == request.auth.uid);
-      allow update: if isAuthorized() && isValidFolder(request.resource.data) && (isAdmin() || resource.data.userId == request.auth.uid);
-      allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
-    }
-
-    match /topics/{topicId} {
-      allow read: if isAuthorized();
-      allow create: if isAuthorized() && isValidTopic(request.resource.data) && (isAdmin() || request.resource.data.userId == request.auth.uid);
-      allow update: if isAuthorized() && isValidTopic(request.resource.data) && (isAdmin() || resource.data.userId == request.auth.uid);
-      allow delete: if isAdmin() || (isAuthorized() && resource.data.userId == request.auth.uid);
-    }
-
     match /feedback/{feedbackId} {
       allow read: if isAdmin();
       allow create: if isAuthorized() && isValidFeedback(request.resource.data) && request.resource.data.userId == request.auth.uid;
@@ -332,8 +323,36 @@ service cloud.firestore {
     }
 
     match /saved_prompts/{promptId} {
-      allow read: if isAuthorized() && (!('topic' in resource.data) || hasTopicPermission(resource.data.topic));
-      allow write: if isAdmin();
+      // Users can read their own prompts. 
+      // They can also read admin prompts (to see the title), 
+      // but the UI will handle the "lock" based on prompt_access.
+      allow read: if isAuthorized() && (
+        resource.data.userId == request.auth.uid || 
+        resource.data.isAdminPrompt == true ||
+        isAdmin()
+      );
+      
+      allow create: if isAuthorized() && isValidSavedPrompt(request.resource.data) && (
+        request.resource.data.userId == request.auth.uid
+      );
+      
+      allow update: if isAuthorized() && isValidSavedPrompt(request.resource.data) && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      
+      allow delete: if isAuthorized() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+    }
+
+    match /prompt_access/{accessId} {
+      // Users can read their own access grants
+      allow read: if isAuthorized() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      
+      // Only admins can manage access
+      allow write: if isAdmin() && isValidPromptAccess(request.resource.data);
     }
 
     // Default deny

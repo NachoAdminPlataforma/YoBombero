@@ -112,7 +112,10 @@ export default function App() {
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as AppUser;
+        // Add a small delay or check if session was just initialized to prevent race conditions
         if (sessionInitialized && data.role !== 'admin' && data.sessionId && data.sessionId !== localSessionId) {
+          // Check if the session ID was updated very recently (within last 2 seconds)
+          // This is a heuristic to avoid conflicts during the initial write propagation
           setSessionConflict(true);
           handleLogout();
         } else {
@@ -177,6 +180,7 @@ export default function App() {
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {

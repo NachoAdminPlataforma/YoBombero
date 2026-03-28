@@ -1,4 +1,4 @@
-import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback, SurveyResponse } from '../types';
+import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback, SurveyResponse, PromptAccess, Folder, Topic } from '../types';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -74,6 +74,73 @@ async function getNextDisplayId(count: number = 1): Promise<number> {
 }
 
 export const api = {
+  subscribeToFolders(userId: string, callback: (folders: Folder[]) => void): () => void {
+    const q = query(collection(db, 'folders'), where('userId', '==', userId));
+    return onSnapshot(q, (snapshot) => {
+      const folders = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Folder))
+        .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      callback(folders);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'folders');
+    });
+  },
+
+  subscribeToTopicsByFolder(userId: string, folderId: string, callback: (topics: Topic[]) => void): () => void {
+    const q = query(collection(db, 'topics'), where('userId', '==', userId), where('folderId', '==', folderId));
+    return onSnapshot(q, (snapshot) => {
+      const topics = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Topic))
+        .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      callback(topics);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'topics');
+    });
+  },
+
+  async createFolder(userId: string, name: string): Promise<void> {
+    try {
+      await addDoc(collection(db, 'folders'), {
+        name,
+        userId,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'folders');
+    }
+  },
+
+  async createTopic(userId: string, folderId: string, name: string): Promise<void> {
+    try {
+      await addDoc(collection(db, 'topics'), {
+        name,
+        folderId,
+        userId,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'topics');
+    }
+  },
+
+  async deleteFolder(folderId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, 'folders', folderId));
+      // Optionally delete all topics and questions in this folder
+      // For now, we'll just delete the folder
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `folders/${folderId}`);
+    }
+  },
+
+  async deleteTopic(topicId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, 'topics', topicId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `topics/${topicId}`);
+    }
+  },
+
   subscribeToQuestions(userId: string, userRole: 'admin' | 'student', permissions: string[], callback: (questions: Question[]) => void): () => void {
     const q = query(collection(db, 'questions'));
     return onSnapshot(q, (snapshot) => {
@@ -85,106 +152,38 @@ export const api = {
   },
 
   subscribeToTestSessions(userId: string, callback: (sessions: TestSession[]) => void): () => void {
-    const q = query(collection(db, 'test_sessions'), where('userId', '==', userId), orderBy('completedAt', 'desc'));
+    const q = query(collection(db, 'test_sessions'), where('userId', '==', userId));
     return onSnapshot(q, (snapshot) => {
-      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TestSession));
+      const sessions = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as TestSession))
+        .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
       callback(sessions);
     });
   },
 
-  subscribeToUserProgress(userId: string, callback: (progress: Record<string, any>) => void): () => void {
-    const q = query(collection(db, 'user_progress'), where('userId', '==', userId));
+  subscribeToTopics(userId: string, userRole: 'admin' | 'student', permissions: string[], callback: (topics: {topic: string, classification: string}[]) => void): () => void {
+    const q = query(collection(db, 'questions'));
     return onSnapshot(q, (snapshot) => {
-      const progress: Record<string, any> = {};
+      const topicsMap = new Map<string, string>();
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        progress[data.questionId] = data;
-      });
-      callback(progress);
-    });
-  },
-
-  subscribeToTopics(userId: string, userRole: 'admin' | 'student', permissions: string[], callback: (topics: {topic: string, folder: string}[]) => void): () => void {
-    const q1 = query(collection(db, 'questions'));
-    const q2 = query(collection(db, 'topics'));
-    const q3 = query(collection(db, 'folders'));
-    
-    let questionsData: any[] = [];
-    let topicsData: any[] = [];
-    let foldersData: any[] = [];
-
-    const updateCallback = () => {
-      const topicsMap = new Map<string, string>();
-      
-      // Add from questions
-      questionsData.forEach(data => {
-        if (data.topic && data.folder) {
+        if (data.topic && data.classification) {
           if (userRole === 'admin' || data.userId === userId || permissions.includes(data.topic)) {
-            topicsMap.set(`${data.folder}::${data.topic}`, data.folder);
+            topicsMap.set(`${data.classification}::${data.topic}`, data.classification);
           }
         }
       });
-
-      // Add from topics
-      topicsData.forEach(data => {
-        if (data.name && data.folder) {
-          if (userRole === 'admin' || data.userId === userId || permissions.includes(data.name)) {
-            topicsMap.set(`${data.folder}::${data.name}`, data.folder);
-          }
-        }
-      });
-
-      // Add empty folders
-      foldersData.forEach(data => {
-        if (data.name) {
-          if (userRole === 'admin' || data.userId === userId) {
-            // Only add if not already present in topicsMap
-            let hasFolder = false;
-            for (const key of topicsMap.keys()) {
-              if (key.startsWith(`${data.name}::`)) {
-                hasFolder = true;
-                break;
-              }
-            }
-            if (!hasFolder) {
-              topicsMap.set(`${data.name}::`, data.name); // Empty topic string
-            }
-          }
-        }
-      });
-
-      const topics = Array.from(topicsMap.entries()).map(([key, folder]) => ({
+      
+      const topics = Array.from(topicsMap.entries()).map(([key, classification]) => ({
         topic: key.split('::')[1],
-        folder
+        classification
       })).sort((a, b) => {
-        const classCompare = a.folder.localeCompare(b.folder);
+        const classCompare = a.classification.localeCompare(b.classification);
         if (classCompare !== 0) return classCompare;
         return a.topic.localeCompare(b.topic, undefined, { numeric: true, sensitivity: 'base' });
       });
-      
       callback(topics);
-    };
-
-    const unsub1 = onSnapshot(q1, (snapshot) => {
-      questionsData = snapshot.docs.map(doc => doc.data());
-      updateCallback();
     });
-
-    const unsub2 = onSnapshot(q2, (snapshot) => {
-      topicsData = snapshot.docs.map(doc => doc.data());
-      updateCallback();
-    });
-
-    const unsub3 = onSnapshot(q3, (snapshot) => {
-      foldersData = snapshot.docs.map(doc => doc.data());
-      updateCallback();
-    });
-
-    return () => {
-      unsub1();
-      unsub2();
-      unsub3();
-    };
   },
 
   async getAllQuestions(userId: string, userRole: 'admin' | 'student' = 'admin'): Promise<Question[]> {
@@ -255,86 +254,28 @@ export const api = {
     }
   },
 
-  async getTopics(userId: string, userRole: 'admin' | 'student' = 'admin', permissions: string[] = []): Promise<{topic: string, folder: string}[]> {
+  async getTopics(userId: string, userRole: 'admin' | 'student' = 'admin', permissions: string[] = []): Promise<{topic: string, classification: string}[]> {
     const questions = await this.getAllQuestions(userId, userRole);
     const topicsMap = new Map<string, string>();
     questions.forEach(q => {
       if (userRole === 'admin' || q.userId === userId || permissions.includes(q.topic)) {
-        topicsMap.set(`${q.folder}::${q.topic}`, q.folder);
+        topicsMap.set(`${q.classification}::${q.topic}`, q.classification);
       }
     });
     
-    try {
-      const q = query(collection(db, 'topics'));
-      const snapshot = await getDocs(q);
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (userRole === 'admin' || data.userId === userId || permissions.includes(data.name)) {
-          topicsMap.set(`${data.folder}::${data.name}`, data.folder);
-        }
-      });
-    } catch (e) {
-      // Ignore if collection doesn't exist or permission denied
-    }
-
-    return Array.from(topicsMap.entries()).map(([key, folder]) => ({
+    return Array.from(topicsMap.entries()).map(([key, classification]) => ({
       topic: key.split('::')[1],
-      folder
+      classification
     })).sort((a, b) => {
-      const classCompare = a.folder.localeCompare(b.folder);
+      const classCompare = a.classification.localeCompare(b.classification);
       if (classCompare !== 0) return classCompare;
       return a.topic.localeCompare(b.topic, undefined, { numeric: true, sensitivity: 'base' });
     });
   },
 
-  async getFolders(userId: string, userRole: 'admin' | 'student' = 'admin'): Promise<string[]> {
-    const topics = await this.getTopics(userId, userRole);
-    const foldersSet = new Set<string>(topics.map(t => t.folder));
-    
+  async getQuestionsByTopic(userId: string, topic: string, classification: string, userRole: 'admin' | 'student' = 'admin'): Promise<Question[]> {
     try {
-      const q = query(collection(db, 'folders'));
-      const snapshot = await getDocs(q);
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (userRole === 'admin' || data.userId === userId) {
-          foldersSet.add(data.name);
-        }
-      });
-    } catch (e) {
-      // Ignore if collection doesn't exist or permission denied
-    }
-    
-    return Array.from(foldersSet).sort((a, b) => a.localeCompare(b));
-  },
-
-  async createFolder(name: string, userId: string): Promise<void> {
-    try {
-      await addDoc(collection(db, 'folders'), {
-        name,
-        userId,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'folders');
-    }
-  },
-
-  async createTopic(name: string, folder: string, userId: string): Promise<void> {
-    try {
-      await addDoc(collection(db, 'topics'), {
-        name,
-        folder,
-        userId,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'topics');
-    }
-  },
-
-  async getQuestionsByTopic(userId: string, topic: string, folder: string, userRole: 'admin' | 'student' = 'admin'): Promise<Question[]> {
-    try {
-      const q = query(collection(db, 'questions'), where('topic', '==', topic), where('folder', '==', folder));
+      const q = query(collection(db, 'questions'), where('topic', '==', topic), where('classification', '==', classification));
       const snapshot = await getDocs(q);
       return snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as Question))
@@ -345,10 +286,10 @@ export const api = {
     }
   },
 
-  async updateTopic(userId: string, oldTopic: string, oldFolder: string, newTopicName: string, newFolder: string, userRole: 'admin' | 'student' = 'admin'): Promise<void> {
+  async updateTopic(userId: string, oldTopic: string, oldClassification: string, newTopicName: string, newClassification: string, userRole: 'admin' | 'student' = 'admin'): Promise<void> {
     const q = query(collection(db, 'questions'), 
       where('topic', '==', oldTopic), 
-      where('folder', '==', oldFolder)
+      where('classification', '==', oldClassification)
     );
     const snapshot = await getDocs(q);
     
@@ -358,7 +299,7 @@ export const api = {
       if (userRole === 'admin' || data.userId === userId) {
         batch.update(document.ref, { 
           topic: newTopicName, 
-          folder: newFolder 
+          classification: newClassification 
         });
       }
     });
@@ -369,7 +310,7 @@ export const api = {
     userId: string,
     userRole: 'admin' | 'student',
     permissions: string[],
-    topics: { topic: string, folder: string, count: number }[], 
+    topics: { topic: string, classification: string, count: number }[], 
     mode: 'srs' | 'balanced',
     totalNum: number
   ): Promise<Question[]> {
@@ -385,7 +326,7 @@ export const api = {
     
     // Filter questions that belong to any of the selected topics
     const filteredQuestions = questionsWithProgress.filter(q => 
-      topics.some(t => t.topic === q.topic && t.folder === q.folder)
+      topics.some(t => t.topic === q.topic && t.classification === q.classification)
     );
 
     const now = new Date().toISOString();
@@ -432,7 +373,7 @@ export const api = {
 
     // 1. Handle Manual Topics first
     for (const t of manualTopics) {
-      const topicQs = filteredQuestions.filter(q => q.topic === t.topic && q.folder === t.folder);
+      const topicQs = filteredQuestions.filter(q => q.topic === t.topic && q.classification === t.classification);
       const sorted = sortByUrgency(topicQs);
       selectedQuestions.push(...sorted.slice(0, t.count));
     }
@@ -449,14 +390,14 @@ export const api = {
           const currentQuota = quotaPerTopic + (extra > 0 ? 1 : 0);
           extra--;
           
-          const topicQs = filteredQuestions.filter(q => q.topic === t.topic && q.folder === t.folder);
+          const topicQs = filteredQuestions.filter(q => q.topic === t.topic && q.classification === t.classification);
           const sorted = sortByUrgency(topicQs);
           selectedQuestions.push(...sorted.slice(0, currentQuota));
         }
       } else {
         // SRS Mode: Pool all questions from auto topics and pick the most urgent ones
         const autoQs = filteredQuestions.filter(q => 
-          autoTopics.some(at => at.topic === q.topic && at.folder === q.folder)
+          autoTopics.some(at => at.topic === q.topic && at.classification === q.classification)
         );
         const sorted = sortByUrgency(autoQs);
         selectedQuestions.push(...sorted.slice(0, remainingTotal));
@@ -504,7 +445,7 @@ export const api = {
             text: qData.text,
             options: qData.options,
             correctOptionIndex: qData.correctOptionIndex,
-            folder: qData.folder,
+            classification: qData.classification,
             topic: qData.topic,
             userId,
             displayId: currentId++,
@@ -543,7 +484,7 @@ export const api = {
     return response.json();
   },
 
-  async saveBulkQuestions(userId: string, questions: any[], folder: string, topic: string, sourcePdf?: string): Promise<{ questions: Question[] }> {
+  async saveBulkQuestions(userId: string, questions: any[], classification: string, topic: string, sourcePdf?: string): Promise<{ questions: Question[] }> {
     const startDisplayId = await getNextDisplayId(questions.length);
     const batch = writeBatch(db);
     const savedQuestions: Question[] = [];
@@ -554,7 +495,7 @@ export const api = {
         text: q.text,
         options: q.options,
         correctOptionIndex: q.correctOptionIndex,
-        folder,
+        classification,
         topic,
         userId,
         displayId: startDisplayId + index,
@@ -636,12 +577,12 @@ export const api = {
     await updateDoc(questionRef, { comments });
   },
 
-  async checkDuplicateQuestion(text: string, topic: string, folder: string): Promise<Question | null> {
+  async checkDuplicateQuestion(text: string, topic: string, classification: string): Promise<Question | null> {
     try {
       const q = query(
         collection(db, 'questions'), 
         where('topic', '==', topic), 
-        where('folder', '==', folder),
+        where('classification', '==', classification),
         where('text', '==', text)
       );
       const snapshot = await getDocs(q);
@@ -655,7 +596,7 @@ export const api = {
     }
   },
 
-  async moveQuestions(ids: string[], destination: { folder: string, topic?: string }): Promise<void> {
+  async moveQuestions(ids: string[], destination: { classification: string, topic?: string }): Promise<void> {
     const batch = writeBatch(db);
     ids.forEach(id => {
       const questionRef = doc(db, 'questions', id);
@@ -716,25 +657,139 @@ export const api = {
     }
   },
 
-  async getSavedPrompts(): Promise<SavedPrompt[]> {
+  async getSavedPrompts(userId: string, userRole: 'admin' | 'student'): Promise<SavedPrompt[]> {
     try {
       const snapshot = await getDocs(collection(db, 'saved_prompts'));
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
+      const prompts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
+      
+      // Filter: own prompts OR admin prompts
+      return prompts.filter(p => 
+        userRole === 'admin' || 
+        p.userId === userId || 
+        p.isAdminPrompt === true
+      ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
       return [];
     }
   },
 
-  async savePrompt(title: string, prompt: string): Promise<void> {
-    await addDoc(collection(db, 'saved_prompts'), { title, prompt });
+  subscribeToSavedPrompts(userId: string, userRole: 'admin' | 'student', callback: (prompts: SavedPrompt[]) => void): () => void {
+    const q = query(collection(db, 'saved_prompts'));
+    return onSnapshot(q, (snapshot) => {
+      const prompts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
+      const filtered = prompts.filter(p => 
+        userRole === 'admin' || 
+        p.userId === userId || 
+        p.isAdminPrompt === true
+      ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(filtered);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
+    });
+  },
+
+  async savePrompt(userId: string, title: string, prompt: string, isAdminPrompt: boolean = false, topic?: string): Promise<void> {
+    try {
+      await addDoc(collection(db, 'saved_prompts'), { 
+        title, 
+        prompt, 
+        userId, 
+        isAdminPrompt, 
+        topic,
+        createdAt: new Date().toISOString() 
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'saved_prompts');
+    }
+  },
+
+  async deletePrompt(id: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, 'saved_prompts', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `saved_prompts/${id}`);
+    }
+  },
+
+  async getPromptAccess(userId: string): Promise<Record<string, boolean>> {
+    try {
+      const q = query(collection(db, 'prompt_access'), where('userId', '==', userId), where('granted', '==', true));
+      const snapshot = await getDocs(q);
+      const access: Record<string, boolean> = {};
+      snapshot.docs.forEach(doc => {
+        access[doc.data().promptId] = true;
+      });
+      return access;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'prompt_access');
+      return {};
+    }
+  },
+
+  async grantPromptAccess(userId: string, promptId: string): Promise<void> {
+    try {
+      const accessId = `${userId}_${promptId}`;
+      await setDoc(doc(db, 'prompt_access', accessId), {
+        userId,
+        promptId,
+        granted: true,
+        grantedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'prompt_access');
+    }
+  },
+
+  async revokePromptAccess(userId: string, promptId: string): Promise<void> {
+    const accessId = `${userId}_${promptId}`;
+    try {
+      await deleteDoc(doc(db, 'prompt_access', accessId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `prompt_access/${accessId}`);
+    }
+  },
+
+  subscribeToPromptAccess(userId: string, callback: (access: Record<string, boolean>) => void): () => void {
+    const q = query(collection(db, 'prompt_access'), where('userId', '==', userId), where('granted', '==', true));
+    return onSnapshot(q, (snapshot) => {
+      const access: Record<string, boolean> = {};
+      snapshot.docs.forEach(doc => {
+        access[doc.data().promptId] = true;
+      });
+      callback(access);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'prompt_access');
+    });
+  },
+
+  subscribeToAllPromptAccess(callback: (access: PromptAccess[]) => void): () => void {
+    const q = query(collection(db, 'prompt_access'));
+    return onSnapshot(q, (snapshot) => {
+      const access = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PromptAccess));
+      callback(access);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'prompt_access');
+    });
+  },
+
+  subscribeToAdminPrompts(callback: (prompts: SavedPrompt[]) => void): () => void {
+    const q = query(collection(db, 'saved_prompts'), where('isAdminPrompt', '==', true));
+    return onSnapshot(q, (snapshot) => {
+      const prompts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
+      callback(prompts);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
+    });
   },
 
   async getTestSessions(userId: string): Promise<TestSession[]> {
     try {
-      const q = query(collection(db, 'test_sessions'), where('userId', '==', userId), orderBy('completedAt', 'desc'));
+      const q = query(collection(db, 'test_sessions'), where('userId', '==', userId));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TestSession));
+      return snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as TestSession))
+        .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'test_sessions');
       return [];
@@ -782,11 +837,11 @@ export const api = {
   },
 
   // Topic Resources (PDFs)
-  async getTopicResource(topic: string, folder: string): Promise<any | null> {
+  async getTopicResource(topic: string, classification: string): Promise<any | null> {
     const q = query(
       collection(db, 'topic_resources'), 
       where('topic', '==', topic), 
-      where('folder', '==', folder)
+      where('classification', '==', classification)
     );
     const snapshot = await getDocs(q);
     if (snapshot.empty) return null;
@@ -795,7 +850,7 @@ export const api = {
   },
 
   async saveTopicResource(data: any): Promise<void> {
-    const existing = await this.getTopicResource(data.topic, data.folder);
+    const existing = await this.getTopicResource(data.topic, data.classification);
     if (existing) {
       await updateDoc(doc(db, 'topic_resources', existing.id), {
         ...data,
@@ -906,19 +961,6 @@ export const api = {
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'users');
     });
-  },
-
-  async updateUserTutorials(userId: string, tutorials: Record<string, boolean>): Promise<void> {
-    const userRef = doc(db, 'users', userId);
-    try {
-      const updates: Record<string, boolean> = {};
-      for (const [key, value] of Object.entries(tutorials)) {
-        updates[`tutorialsCompleted.${key}`] = value;
-      }
-      await updateDoc(userRef, updates);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
-    }
   },
 
   async updateUserProfile(userId: string, data: Partial<User>): Promise<void> {

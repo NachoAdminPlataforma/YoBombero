@@ -9,14 +9,14 @@
         "text": { "type": "string" },
         "options": { "type": "array", "items": { "type": "string" } },
         "correctOptionIndex": { "type": "integer" },
-        "folder": { "type": "string" },
+        "classification": { "type": "string" },
         "topic": { "type": "string" },
         "userId": { "type": "string", "description": "The user who created this question (optional, null for global questions)" },
         "createdAt": { "type": "string", "format": "date-time" },
         "sourcePdf": { "type": "string" },
         "mnemonics": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["text", "options", "correctOptionIndex", "folder", "topic"]
+      "required": ["text", "options", "correctOptionIndex", "classification", "topic"]
     },
     "User": {
       "title": "User",
@@ -41,12 +41,25 @@
       "type": "object",
       "properties": {
         "title": { "type": "string" },
+        "prompt": { "type": "string" },
         "userId": { "type": "string" },
         "isAdminPrompt": { "type": "boolean" },
         "topic": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "userId"]
+      "required": ["title", "prompt", "userId"]
+    },
+    "PromptAccess": {
+      "title": "PromptAccess",
+      "description": "Access grant for an admin prompt to a specific user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "promptId": { "type": "string" },
+        "granted": { "type": "boolean" },
+        "grantedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "promptId", "granted"]
     },
     "PromptContent": {
       "title": "PromptContent",
@@ -119,41 +132,18 @@
       },
       "required": ["userId", "completedAt", "totalQuestions", "correctCount", "incorrectCount", "score"]
     },
-    "Folder": {
-      "title": "Folder",
-      "description": "A folder to organize topics",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "userId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["name"]
-    },
-    "Topic": {
-      "title": "Topic",
-      "description": "A topic to organize questions",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "folder": { "type": "string" },
-        "userId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["name", "folder"]
-    },
     "TopicResource": {
       "title": "TopicResource",
       "description": "A resource (PDF) associated with a topic",
       "type": "object",
       "properties": {
         "topic": { "type": "string" },
-        "folder": { "type": "string" },
+        "classification": { "type": "string" },
         "fileName": { "type": "string" },
         "extractedText": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["topic", "folder", "fileName"]
+      "required": ["topic", "classification", "fileName"]
     }
   },
   "firestore": {
@@ -176,14 +166,6 @@
     "/test_sessions/{sessionId}": {
       "schema": "TestSession",
       "description": "Test session history"
-    },
-    "/folders/{folderId}": {
-      "schema": "Folder",
-      "description": "Folders"
-    },
-    "/topics/{topicId}": {
-      "schema": "Topic",
-      "description": "Topics"
     },
     "/topic_resources/{resourceId}": {
       "schema": "TopicResource",

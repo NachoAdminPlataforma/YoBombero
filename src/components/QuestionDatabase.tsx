@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
-import { Question, User as AppUser, ReviewHistory } from '../types';
-import { Folder, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Edit2, Trash2, Clock, CheckCircle2, XCircle, ArrowLeft, Save, X, Search, Database, FileText, Star, MessageSquare, AlertTriangle, ListFilter, LayoutGrid, Move, Upload, File as FileIcon, Loader2, GraduationCap, Wrench, Plus } from 'lucide-react';
+import { Question, User as AppUser, ReviewHistory, Folder as FolderType, Topic as TopicType } from '../types';
+import { Folder, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Edit2, Trash2, Clock, CheckCircle2, XCircle, ArrowLeft, Save, X, Search, Database, FileText, Star, MessageSquare, AlertTriangle, ListFilter, LayoutGrid, Move, Upload, File as FileIcon, Loader2, Plus } from 'lucide-react';
 import { QuestionDetailsModal } from './QuestionDetailsModal';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -27,7 +27,7 @@ const QuestionRow = React.memo(({
   const isNew = (q.hits || 0) === 0 && (q.misses || 0) === 0;
   
   return (
-    <React.Fragment key={q.id}>
+    <>
       {/* Desktop Row */}
       <tr 
         key={`desktop-${q.id}`} 
@@ -223,7 +223,7 @@ const QuestionRow = React.memo(({
           </div>
         </td>
       </tr>
-    </React.Fragment>
+    </>
   );
 });
 
@@ -236,8 +236,8 @@ interface QuestionDatabaseProps {
 
 export function QuestionDatabase({ userId, userRole, permissions, appUser }: QuestionDatabaseProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [emptyFolders, setEmptyFolders] = useState<string[]>([]);
-  const [emptyTopics, setEmptyTopics] = useState<{folder: string, topic: string}[]>([]);
+  const [folders, setFolders] = useState<FolderType[]>([]);
+  const [topics, setTopics] = useState<TopicType[]>([]);
   const [currentPath, setCurrentPath] = useState<string[]>([]); // [] -> ['Legislativo'] -> ['Legislativo', 'Tema 1']
   const [loading, setLoading] = useState(true);
   const [searchId, setSearchId] = useState('');
@@ -245,6 +245,10 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
   const [topicSort, setTopicSort] = useState<'default' | 'newest' | 'oldest'>('default');
   const [isRecentExpanded, setIsRecentExpanded] = useState(true);
+
+  const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
+  const [isCreateTopicModalOpen, setIsCreateTopicModalOpen] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
 
   useEffect(() => {
   }, [currentPath, searchId, searchText, topicSort]);
@@ -271,67 +275,16 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
 
   // Edit/History Modal state
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
-  const [editingTopic, setEditingTopic] = useState<{oldTopic: string, oldFolder: string, newTopic: string, newFolder: string} | null>(null);
+  const [editingTopic, setEditingTopic] = useState<{oldTopic: string, oldClassification: string, newTopic: string, newClassification: string} | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{isOpen: boolean, isBulk: boolean, questionId?: string}>({ isOpen: false, isBulk: false });
 
   const [topicResource, setTopicResource] = useState<any | null>(null);
   const [uploadingPdf, setUploadingPdf] = useState(false);
 
-  // Tutorial state
-  const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState(0);
-
-  const fixDatabaseStructure = async () => {
-    setLoading(true);
-    try {
-      const allQs = await api.getAllQuestions(userId, userRole);
-      const allTopics = await api.getTopics(userId, userRole, permissions);
-      
-      const legislativeKeywords = ['ley', 'constitución', 'trebep', 'igualdad', 'protección de datos', 'reglamento', 'derecho', 'normativa', 'legislativo'];
-      
-      for (const q of allQs) {
-        let folder = q.folder;
-        let topic = q.topic;
-        
-        // If folder is missing or "unnamed"
-        if (!folder || folder.trim() === '' || folder.toLowerCase() === 'sin nombre') {
-          // Try to find topic in allTopics to get its folder
-          const topicInfo = allTopics.find(t => t.topic === topic);
-          if (topicInfo && topicInfo.folder && topicInfo.folder.trim() !== '') {
-            folder = topicInfo.folder;
-          } else {
-            // Heuristic: check topic name for legislative keywords
-            const isLegislative = legislativeKeywords.some(k => topic.toLowerCase().includes(k));
-            folder = isLegislative ? 'Legislativo' : 'Específico';
-          }
-          
-          // Update the question
-          await api.updateQuestion(q.id, { folder });
-        }
-      }
-      
-      // Also fix topics that might have empty folders
-      for (const t of allTopics) {
-        if (!t.folder || t.folder.trim() === '' || t.folder.toLowerCase() === 'sin nombre') {
-          const isLegislative = legislativeKeywords.some(k => t.topic.toLowerCase().includes(k));
-          const newFolder = isLegislative ? 'Legislativo' : 'Específico';
-          await api.updateTopic(userId, t.topic, t.folder, t.topic, newFolder, userRole);
-        }
-      }
-      
-      alert("Base de datos organizada correctamente en 'Específico' y 'Legislativo'.");
-    } catch (error) {
-      console.error("Error fixing database:", error);
-      alert("Hubo un error al organizar la base de datos.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (currentPath.length === 2) {
-      const [folder, topic] = currentPath;
-      api.getTopicResource(topic, folder).then(setTopicResource);
+      const [classification, topic] = currentPath;
+      api.getTopicResource(topic, classification).then(setTopicResource);
     } else {
       setTopicResource(null);
     }
@@ -367,16 +320,16 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
 
     setUploadingPdf(true);
     try {
-      const [folder, topic] = currentPath;
+      const [classification, topic] = currentPath;
       const extractedText = await extractTextFromPDF(file);
       
       await api.saveTopicResource({
         topic,
-        folder,
+        classification,
         fileName: file.name,
         extractedText: extractedText.substring(0, 800000) // Firestore limit safety
       });
-      const resource = await api.getTopicResource(topic, folder);
+      const resource = await api.getTopicResource(topic, classification);
       setTopicResource(resource);
       setUploadingPdf(false);
     } catch (error) {
@@ -396,22 +349,32 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
 
   useEffect(() => {
     setLoading(true);
-    const unsubscribe = api.subscribeToQuestions(userId, userRole, permissions, (data) => {
+    const unsubQuestions = api.subscribeToQuestions(userId, userRole, permissions, (data) => {
       setQuestions(data);
       setLoading(false);
     });
-    
-    const unsubscribeTopics = api.subscribeToTopics(userId, userRole, permissions, (topicsData) => {
-      const folders = Array.from(new Set(topicsData.map(t => t.folder)));
-      setEmptyFolders(folders);
-      setEmptyTopics(topicsData);
+
+    const unsubFolders = api.subscribeToFolders(userId, (data) => {
+      setFolders(data);
     });
 
     return () => {
-      unsubscribe();
-      unsubscribeTopics();
+      unsubQuestions();
+      unsubFolders();
     };
   }, [userId, userRole, permissions]);
+
+  useEffect(() => {
+    if (currentPath.length === 1) {
+      const folder = folders.find(f => f.name === currentPath[0]);
+      if (folder) {
+        const unsubTopics = api.subscribeToTopicsByFolder(userId, folder.id, (data) => {
+          setTopics(data);
+        });
+        return () => unsubTopics();
+      }
+    }
+  }, [currentPath, folders, userId]);
 
   useEffect(() => {
     setSelectedQuestionIds(new Set());
@@ -594,102 +557,25 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       await api.updateTopic(
         userId,
         editingTopic.oldTopic, 
-        editingTopic.oldFolder, 
+        editingTopic.oldClassification, 
         editingTopic.newTopic, 
-        editingTopic.newFolder,
+        editingTopic.newClassification,
         userRole
       );
       setEditingTopic(null);
-      // If we moved the topic out of the current folder, go back to root
-      if (editingTopic.oldFolder !== editingTopic.newFolder) {
+      // If we moved the topic out of the current classification, go back to root
+      if (editingTopic.oldClassification !== editingTopic.newClassification) {
         setCurrentPath([]);
       } else if (editingTopic.oldTopic !== editingTopic.newTopic) {
         // If we just renamed it, update path
-        setCurrentPath([editingTopic.newFolder, editingTopic.newTopic]);
+        setCurrentPath([editingTopic.newClassification, editingTopic.newTopic]);
       }
     }
   };
 
   // Navigation logic
-  const navigateTo = (path: string[]) => {
-    setCurrentPath(path);
-    // If we are in tutorial and moving to a topic, advance step
-    if (showTutorial && tutorialStep === 2 && path.length === 2) {
-      setTutorialStep(3);
-    }
-  };
+  const navigateTo = (path: string[]) => setCurrentPath(path);
   
-  const tutorialSteps = [
-    {
-      title: "Bienvenido a tu Base de Datos",
-      content: "Aquí puedes gestionar todas las preguntas que has creado o importado. Vamos a ver cómo está organizada.",
-      target: ".tour-db-root",
-      position: "center"
-    },
-    {
-      title: "Carpetas Principales",
-      content: "Tus preguntas se dividen en dos grandes bloques: 'Específico' (temario propio) y 'Legislativo' (leyes y normas). Puedes crear nuevas carpetas con el botón '+' al final.",
-      target: ".tour-db-folders",
-      position: "bottom"
-    },
-    {
-      title: "Temas y Organización",
-      content: "Dentro de cada carpeta verás los temas. Puedes editarlos, borrarlos o crear nuevos. Al crear una pregunta, puedes seleccionar estos temas directamente.",
-      target: ".tour-db-topics",
-      position: "bottom"
-    },
-    {
-      title: "Recursos del Tema (PDF)",
-      content: "¡Truco de experto! Sube el PDF del tema aquí. Así, al crear preguntas, la IA usará este PDF automáticamente sin que tengas que subirlo cada vez.",
-      target: ".tour-db-pdf",
-      position: "bottom"
-    },
-    {
-      title: "Listado de Preguntas",
-      content: "Aquí ves tus preguntas. Los números indican aciertos (verde) y fallos (rojo). También verás iconos si la pregunta tiene mnemotécnicas o comentarios.",
-      target: ".tour-db-questions",
-      position: "top"
-    },
-    {
-      title: "Detalles y Edición",
-      content: "Haz clic en una pregunta para ver su historial, editarla, añadir mnemotécnicas o marcarla para preguntar al profesor.",
-      target: ".tour-db-question-row",
-      position: "bottom"
-    },
-    {
-      title: "Buscador y Filtros",
-      content: "Busca por ID o por palabras clave. También puedes ordenar por fecha o por prioridad de repaso (algoritmo SRS).",
-      target: ".tour-db-search",
-      position: "bottom"
-    },
-    {
-      title: "Acciones Masivas",
-      content: "Usa el modo selección para mover preguntas entre temas o borrarlas en bloque. ¡Ahorra tiempo organizando!",
-      target: ".tour-db-bulk",
-      position: "bottom"
-    },
-    {
-      title: "Herramientas de Mantenimiento",
-      content: "Si tienes preguntas desorganizadas, usa el botón 'Organizar Carpetas' para que el sistema las clasifique automáticamente en 'Específico' o 'Legislativo'.",
-      target: ".tour-db-fix",
-      position: "top"
-    }
-  ];
-
-  const nextTutorialStep = () => {
-    if (tutorialStep < tutorialSteps.length - 1) {
-      setTutorialStep(tutorialStep + 1);
-    } else {
-      setShowTutorial(false);
-      setTutorialStep(0);
-    }
-  };
-
-  const skipTutorial = () => {
-    setShowTutorial(false);
-    setTutorialStep(0);
-  };
-
   const getBreadcrumbs = () => {
     return (
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -719,7 +605,7 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
           })}
         </div>
 
-        <div className="flex items-center gap-2 tour-db-filters tour-db-bulk tour-db-search">
+        <div className="flex items-center gap-2 tour-db-filters">
           {isSelectionMode ? (
             <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800">
               <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
@@ -778,6 +664,37 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
     );
   };
 
+  const handleCreateFolder = async () => {
+    if (!newItemName.trim()) return;
+    await api.createFolder(userId, newItemName.trim());
+    setNewItemName('');
+    setIsCreateFolderModalOpen(false);
+  };
+
+  const handleCreateTopic = async () => {
+    if (!newItemName.trim() || currentPath.length === 0) return;
+    const folder = folders.find(f => f.name === currentPath[0]);
+    if (folder) {
+      await api.createTopic(userId, folder.id, newItemName.trim());
+      setNewItemName('');
+      setIsCreateTopicModalOpen(false);
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('¿Estás seguro de que quieres eliminar esta carpeta?')) {
+      await api.deleteFolder(folderId);
+    }
+  };
+
+  const handleDeleteTopic = async (topicId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('¿Estás seguro de que quieres eliminar este tema?')) {
+      await api.deleteTopic(topicId);
+    }
+  };
+
   // View rendering logic
   const renderContent = () => {
     if (loading) return <div className="text-center py-12 text-slate-500">Cargando...</div>;
@@ -809,7 +726,7 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800 uppercase tracking-tighter">ID: {q.displayId}</span>
-                      <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{q.folder} / {q.topic}</span>
+                      <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{q.classification} / {q.topic}</span>
                     </div>
                     <p className="text-slate-700 dark:text-slate-200 line-clamp-1 text-sm font-medium">{q.text}</p>
                   </div>
@@ -827,10 +744,8 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       );
     }
 
-    // Root View (Folders)
+    // Level 0: Folders and Recent
     if (currentPath.length === 0) {
-      const folders = Array.from(new Set([...questions.map(q => q.folder), ...emptyFolders])).filter(f => f && f.trim() !== '' && f.toLowerCase() !== 'sin nombre');
-      
       const recentQuestions = [...questions].sort((a, b) => {
         const dateA = a.createdAt || '2000-01-01T00:00:00.000Z';
         const dateB = b.createdAt || '2000-01-01T00:00:00.000Z';
@@ -839,50 +754,45 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
         return (b.displayId || 0) - (a.displayId || 0);
       }).slice(0, 10);
 
-      const sortedFolders = folders.sort((a, b) => {
-        if (a === 'Legislativo') return -1;
-        if (b === 'Legislativo') return 1;
-        if (a === 'Específico') return -1;
-        if (b === 'Específico') return 1;
-        return a.localeCompare(b);
-      });
-
       return (
-        <div className="space-y-8 tour-db-root">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 tour-db-folders">
-            {sortedFolders.map(c => {
-              const count = questions.filter(q => q.folder === c).length;
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {folders.map(f => {
+              const count = questions.filter(q => q.classification === f.name).length;
               return (
-                <button 
-                  key={c}
-                  onClick={() => navigateTo([c])}
-                  data-folder-path={c}
-                  className={`bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border transition-all flex items-center justify-between group text-left border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-md`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                      <Folder size={24} />
+                <div key={f.id} className="relative group">
+                  <button 
+                    onClick={() => navigateTo([f.name])}
+                    data-folder-path={f.name}
+                    className={`w-full bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border transition-all flex items-center justify-between group text-left border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-md`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <Folder size={24} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">{f.name}</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{count} preguntas</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">{c}</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{count} preguntas</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
-                </button>
+                    <ChevronRight className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                  </button>
+                  <button 
+                    onClick={(e) => handleDeleteFolder(f.id, e)}
+                    className="absolute top-2 right-2 p-2 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               );
             })}
+            
             <button 
-              onClick={() => {
-                const name = prompt("Nombre de la nueva carpeta:");
-                if (name) setEmptyFolders(prev => [...prev, name]);
-              }}
-              className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:border-indigo-400 dark:hover:border-indigo-500/50 hover:bg-indigo-50/30 transition-all group"
+              onClick={() => setIsCreateFolderModalOpen(true)}
+              className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-3 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-all group"
             >
-              <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-indigo-500 shadow-sm transition-colors">
-                <Plus size={24} />
-              </div>
-              <span className="text-sm font-bold text-slate-500 dark:text-slate-400 group-hover:text-indigo-600">Nueva Carpeta</span>
+              <Plus size={24} className="group-hover:scale-110 transition-transform" />
+              <span className="font-bold">Nueva Carpeta</span>
             </button>
           </div>
 
@@ -914,7 +824,7 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800 uppercase tracking-tighter">ID: {q.displayId}</span>
-                          <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{q.folder} / {q.topic}</span>
+                          <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{q.classification} / {q.topic}</span>
                           {q.createdAt && (
                             <span className="text-[10px] text-slate-400 dark:text-slate-500">
                               {new Date(q.createdAt).toLocaleDateString()} {new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -936,36 +846,30 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
 
     // Level 1: Topics
     if (currentPath.length === 1) {
-      const folder = currentPath[0];
-      const filteredQs = questions.filter(q => q.folder === folder);
-      const topics = Array.from(new Set([
-        ...filteredQs.map(q => q.topic),
-        ...emptyTopics.filter(t => t.folder === folder && t.topic !== '').map(t => t.topic)
-      ])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-
-      if (topics.length === 0) return <div className="text-center py-12 text-slate-500 dark:text-slate-400">No hay temas en esta carpeta.</div>;
-
+      const classification = currentPath[0];
+      const filteredQs = questions.filter(q => q.classification === classification);
+      
       return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 tour-db-topics">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {topics.map(t => {
-            const topicQs = filteredQs.filter(q => q.topic === t);
+            const topicQs = filteredQs.filter(q => q.topic === t.name);
             const count = topicQs.length;
             const newCount = topicQs.filter(q => (q.hits || 0) === 0 && (q.misses || 0) === 0).length;
             
             return (
               <div 
-                key={t} 
-                data-folder-path={`${folder}::${t}`}
+                key={t.id} 
+                data-folder-path={`${classification}::${t.name}`}
                 className={`bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border transition-all group relative border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-md`}
               >
                 <button 
-                  onClick={() => navigateTo([folder, t])}
+                  onClick={() => navigateTo([classification, t.name])}
                   className="w-full flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-3">
                     <Folder size={20} className="text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
                     <div>
-                      <h4 className="font-semibold text-slate-800 dark:text-slate-200">{t}</h4>
+                      <h4 className="font-semibold text-slate-800 dark:text-slate-200">{t.name}</h4>
                       <div className="flex items-center gap-2">
                         <p className="text-xs text-slate-500 dark:text-slate-400">{count} preguntas</p>
                         {newCount > 0 && (
@@ -981,35 +885,40 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                   </div>
                   <ChevronRight size={16} className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
                 </button>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingTopic({
-                      oldTopic: t,
-                      oldFolder: folder,
-                      newTopic: t,
-                      newFolder: folder
-                    });
-                  }}
-                  className="absolute top-2 right-2 p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                  title="Editar carpeta"
-                >
-                  <Edit2 size={14} />
-                </button>
+                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingTopic({
+                        oldTopic: t.name,
+                        oldClassification: classification,
+                        newTopic: t.name,
+                        newClassification: classification
+                      });
+                    }}
+                    className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg"
+                    title="Editar tema"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                  <button 
+                    onClick={(e) => handleDeleteTopic(t.id, e)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                    title="Eliminar tema"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             );
           })}
+          
           <button 
-            onClick={() => {
-              const name = prompt("Nombre del nuevo tema:");
-              if (name) setEmptyTopics(prev => [...prev, { folder, topic: name }]);
-            }}
-            className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:border-indigo-400 dark:hover:border-indigo-500/50 hover:bg-indigo-50/30 transition-all group"
+            onClick={() => setIsCreateTopicModalOpen(true)}
+            className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-3 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-all group min-h-[80px]"
           >
-            <div className="w-8 h-8 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-indigo-500 shadow-sm transition-colors">
-              <Plus size={20} />
-            </div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 group-hover:text-indigo-600">Nuevo Tema</span>
+            <Plus size={20} className="group-hover:scale-110 transition-transform" />
+            <span className="font-bold">Nuevo Tema</span>
           </button>
         </div>
       );
@@ -1017,8 +926,8 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
 
     // Level 2: Questions Table
     if (currentPath.length === 2) {
-      const [folder, topic] = currentPath;
-      const topicQs = questions.filter(q => q.folder === folder && q.topic === topic);
+      const [classification, topic] = currentPath;
+      const topicQs = questions.filter(q => q.classification === classification && q.topic === topic);
       const newQuestionsCount = topicQs.filter(q => (q.hits || 0) === 0 && (q.misses || 0) === 0).length;
 
       const filteredQs = [...topicQs]
@@ -1099,9 +1008,9 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       };
 
       return (
-        <div className="space-y-4 tour-db-questions">
+        <div className="space-y-4">
           {/* Topic Resources Section */}
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6 tour-db-pdf">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm mb-6">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <FileIcon size={16} className="text-indigo-600 dark:text-indigo-400" />
@@ -1216,7 +1125,7 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                     <th className="px-6 py-4 font-semibold text-right">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 tour-db-question-row">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredQs.map(q => (
                     <QuestionRow
                       key={q.id}
@@ -1261,80 +1170,7 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
 
         {getBreadcrumbs()}
         {renderContent()}
-
-        <div className="flex flex-wrap items-center gap-4 pt-8 border-t border-slate-100 dark:border-slate-800 mt-8">
-          <button 
-            onClick={() => setShowTutorial(true)}
-            className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl text-sm font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-2"
-          >
-            <GraduationCap size={18} />
-            Ver Tutorial de la Base de Datos
-          </button>
-          <button 
-            onClick={fixDatabaseStructure}
-            className="tour-db-fix px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl text-sm font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
-          >
-            <Wrench size={18} />
-            Organizar Carpetas (Fix)
-          </button>
-        </div>
       </div>
-
-      {/* Tutorial Overlay */}
-      {showTutorial && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in duration-300">
-            <div className="p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-none">
-                    <GraduationCap size={24} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                      {tutorialSteps[tutorialStep].title}
-                    </h3>
-                    <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
-                      Paso {tutorialStep + 1} de {tutorialSteps.length}
-                    </p>
-                  </div>
-                </div>
-                <button onClick={skipTutorial} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-8">
-                {tutorialSteps[tutorialStep].content}
-              </p>
-              
-              <div className="flex items-center justify-between gap-4">
-                <button 
-                  onClick={skipTutorial}
-                  className="text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                >
-                  Saltar tutorial
-                </button>
-                <button 
-                  onClick={nextTutorialStep}
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-200 dark:shadow-none flex items-center gap-2 active:scale-95"
-                >
-                  {tutorialStep === tutorialSteps.length - 1 ? '¡Entendido!' : 'Siguiente'}
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            </div>
-            
-            {/* Progress bar */}
-            <div className="h-1.5 bg-slate-100 dark:bg-slate-800 w-full">
-              <div 
-                className="h-full bg-indigo-600 transition-all duration-500" 
-                style={{ width: `${((tutorialStep + 1) / tutorialSteps.length) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Move Questions Modal */}
       {isMoveModalOpen && (
@@ -1352,19 +1188,17 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
             <div className="p-4 overflow-y-auto">
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 px-2">Selecciona la carpeta de destino:</p>
               <div className="space-y-1">
-                {Array.from(new Set([...questions.map(q => q.folder), ...emptyFolders])).map(folder => {
-                  const topics = Array.from(new Set([
-                    ...questions.filter(q => q.folder === folder).map(q => q.topic),
-                    ...emptyTopics.filter(t => t.folder === folder && t.topic !== '').map(t => t.topic)
-                  ])).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+                {['Legislativo', 'Específico'].map(classification => {
+                  const topics = Array.from(new Set(questions.filter(q => q.classification === classification).map(q => q.topic)))
+                    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
                   
                   return (
-                    <div key={folder} className="space-y-1">
+                    <div key={classification} className="space-y-1">
                       <button
                         onClick={async () => {
                           setLoading(true);
                           try {
-                            await api.moveQuestions(Array.from(selectedQuestionIds), { folder });
+                            await api.moveQuestions(Array.from(selectedQuestionIds), { classification });
                             setSelectedQuestionIds(new Set());
                             setIsMoveModalOpen(false);
                             setIsSelectionMode(false);
@@ -1377,31 +1211,30 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                         className="w-full flex items-center gap-3 p-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-colors text-left group"
                       >
                         <Folder className="text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" size={20} />
-                        <span className="font-bold text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{folder}</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{classification}</span>
                       </button>
                       <div className="ml-6 space-y-1 border-l-2 border-slate-100 dark:border-slate-800 pl-2">
                         {topics.map(topic => (
-                          <div key={topic}>
-                            <button
-                              onClick={async () => {
-                                setLoading(true);
-                                try {
-                                  await api.moveQuestions(Array.from(selectedQuestionIds), { folder, topic });
-                                  setSelectedQuestionIds(new Set());
-                                  setIsMoveModalOpen(false);
-                                  setIsSelectionMode(false);
-                                } catch (error) {
-                                  console.error("Error moving questions:", error);
-                                } finally {
-                                  setLoading(false);
-                                }
-                              }}
-                              className="w-full flex items-center gap-3 p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors text-left group"
-                            >
-                              <Folder className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-400" size={16} />
-                              <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{topic}</span>
-                            </button>
-                          </div>
+                          <button
+                            key={topic}
+                            onClick={async () => {
+                              setLoading(true);
+                              try {
+                                await api.moveQuestions(Array.from(selectedQuestionIds), { classification, topic });
+                                setSelectedQuestionIds(new Set());
+                                setIsMoveModalOpen(false);
+                                setIsSelectionMode(false);
+                              } catch (error) {
+                                console.error("Error moving questions:", error);
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                            className="w-full flex items-center gap-3 p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors text-left group"
+                          >
+                            <Folder className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-400" size={16} />
+                            <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{topic}</span>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -1430,12 +1263,100 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
           }}
         />
       )}
+      {/* Create Folder Modal */}
+      {isCreateFolderModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Nueva Carpeta</h2>
+              <button 
+                onClick={() => setIsCreateFolderModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre de la Carpeta</label>
+                <input 
+                  type="text"
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  placeholder="Ej: Legislativo, Específico..."
+                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-2">
+                <button 
+                  onClick={() => setIsCreateFolderModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleCreateFolder}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Crear Carpeta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Topic Modal */}
+      {isCreateTopicModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Nuevo Tema</h2>
+              <button 
+                onClick={() => setIsCreateTopicModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre del Tema</label>
+                <input 
+                  type="text"
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  placeholder="Ej: Tema 1, Constitución..."
+                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  autoFocus
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-2">
+                <button 
+                  onClick={() => setIsCreateTopicModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleCreateTopic}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Crear Tema
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Topic Modal */}
       {editingTopic && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Editar Carpeta</h2>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Editar Tema</h2>
               <button 
                 onClick={() => setEditingTopic(null)}
                 className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
@@ -1447,12 +1368,12 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Carpeta</label>
                 <select 
-                  value={editingTopic.newFolder}
-                  onChange={(e) => setEditingTopic({...editingTopic, newFolder: e.target.value})}
+                  value={editingTopic.newClassification}
+                  onChange={(e) => setEditingTopic({...editingTopic, newClassification: e.target.value})}
                   className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 >
-                  {Array.from(new Set([...questions.map(q => q.folder), ...emptyFolders])).map(f => (
-                    <option key={f} value={f}>{f}</option>
+                  {folders.map(f => (
+                    <option key={f.id} value={f.name}>{f.name}</option>
                   ))}
                 </select>
               </div>

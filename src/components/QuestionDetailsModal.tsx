@@ -24,17 +24,17 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
   const [newMnemonic, setNewMnemonic] = useState('');
   const [isGeneratingMnemonic, setIsGeneratingMnemonic] = useState(false);
   const [attachedPdf, setAttachedPdf] = useState<any | null>(null);
-  const [topics, setTopics] = useState<{topic: string, folder: string}[]>([]);
+  const [topics, setTopics] = useState<{topic: string, classification: string}[]>([]);
   const [isMoving, setIsMoving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [duplicateFound, setDuplicateFound] = useState<Question | null>(null);
   const [comments, setComments] = useState<string[]>(question.comments || []);
   const [newComment, setNewComment] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<{
-    folder: string;
+    classification: string;
     topic: string;
   }>({ 
-    folder: question.folder, 
+    classification: question.classification, 
     topic: question.topic 
   });
 
@@ -70,7 +70,7 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
 
   useEffect(() => {
     loadHistory();
-    api.getTopicResource(question.topic, question.folder).then(setAttachedPdf);
+    api.getTopicResource(question.topic, question.classification).then(setAttachedPdf);
     api.getTopics(userId, userRole, permissions).then(setTopics);
   }, [question.id, userId, userRole, permissions]);
 
@@ -197,7 +197,7 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
   const handleMoveQuestion = async () => {
     try {
       // Check for duplicate in destination
-      const duplicate = await api.checkDuplicateQuestion(question.text, selectedFolder.topic, selectedFolder.folder);
+      const duplicate = await api.checkDuplicateQuestion(question.text, selectedFolder.topic, selectedFolder.classification);
       if (duplicate && duplicate.id !== question.id) {
         setDuplicateFound(duplicate);
         return;
@@ -357,15 +357,14 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Carpeta</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Clasificación</label>
                     <select 
-                      value={editForm.folder || ''}
-                      onChange={(e) => setEditForm({...editForm, folder: e.target.value})}
+                      value={editForm.classification || 'Legislativo'}
+                      onChange={(e) => setEditForm({...editForm, classification: e.target.value as any})}
                       className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                     >
-                      {Array.from(new Set(topics.map(t => t.folder))).map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
+                      <option value="Legislativo">Legislativo</option>
+                      <option value="Específico">Específico</option>
                     </select>
                   </div>
                   <div>
@@ -535,19 +534,18 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Carpeta</label>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Clasificación</label>
                     <select 
-                      value={selectedFolder.folder}
+                      value={selectedFolder.classification}
                       onChange={(e) => {
-                        const newFolder = e.target.value;
-                        const firstTopicInNewFolder = topics.find(t => t.folder === newFolder)?.topic || '';
-                        setSelectedFolder({ folder: newFolder, topic: firstTopicInNewFolder });
+                        const newClass = e.target.value as 'Legislativo' | 'Específico';
+                        const firstTopicInNewClass = topics.find(t => t.classification === newClass)?.topic || '';
+                        setSelectedFolder({ classification: newClass, topic: firstTopicInNewClass });
                       }}
                       className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                     >
-                      {Array.from(new Set(topics.map(t => t.folder))).map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
+                      <option value="Legislativo">Legislativo</option>
+                      <option value="Específico">Específico</option>
                     </select>
                   </div>
                   <div>
@@ -558,11 +556,11 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
                       className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                     >
                       {topics
-                        .filter(t => t.folder === selectedFolder.folder && t.topic !== '')
+                        .filter(t => t.classification === selectedFolder.classification)
                         .map(t => (
                           <option key={t.topic} value={t.topic}>{t.topic}</option>
                         ))}
-                      {!topics.find(t => t.topic === selectedFolder.topic && t.folder === selectedFolder.folder && t.topic !== '') && (
+                      {!topics.find(t => t.topic === selectedFolder.topic && t.classification === selectedFolder.classification) && (
                         <option value={selectedFolder.topic}>{selectedFolder.topic}</option>
                       )}
                     </select>
@@ -570,14 +568,14 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 p-2 rounded border border-slate-100 dark:border-slate-800">
                   <ChevronRight size={14} className="text-indigo-400" />
-                  <span>La pregunta se moverá de <strong>{question.folder} / {question.topic}</strong> a <strong>{selectedFolder.folder} / {selectedFolder.topic}</strong></span>
+                  <span>La pregunta se moverá de <strong>{question.classification} / {question.topic}</strong> a <strong>{selectedFolder.classification} / {selectedFolder.topic}</strong></span>
                 </div>
               </div>
             )}
             
             {!isMoving && (
               <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded text-xs font-medium">{question.folder}</span>
+                <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded text-xs font-medium">{question.classification}</span>
                 <ChevronRight size={14} className="text-slate-300" />
                 <span className="font-medium">{question.topic}</span>
               </div>
