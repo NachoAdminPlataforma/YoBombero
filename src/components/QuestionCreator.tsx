@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { playNotificationSound } from '../lib/audio';
-import { SavedPrompt, Folder as FolderType, Topic as TopicType } from '../types';
-import { Folder, Sparkles, Save, FileText, PenTool, Upload, X, File as FileIcon, Lock, Unlock, Plus, AlertTriangle } from 'lucide-react';
+import { SavedPrompt } from '../types';
+import { Sparkles, Save, FileText, PenTool, Upload, X, File as FileIcon } from 'lucide-react';
 
 interface QuestionCreatorProps {
   userId: string;
@@ -12,15 +12,14 @@ interface QuestionCreatorProps {
 
 export function QuestionCreator({ userId, userRole, permissions }: QuestionCreatorProps) {
   const [activeTab, setActiveTab] = useState<'ai' | 'manual'>('ai');
-  const [folders, setFolders] = useState<FolderType[]>([]);
-  const [topics, setTopics] = useState<TopicType[]>([]);
+  const [topics, setTopics] = useState<{topic: string, classification: string}[]>([]);
 
   useEffect(() => {
-    const unsubFolders = api.subscribeToFolders(userId, (f) => {
-      setFolders(f);
+    const unsubscribe = api.subscribeToTopics(userId, userRole, permissions, (t) => {
+      setTopics(t);
     });
-    return () => unsubFolders();
-  }, [userId]);
+    return () => unsubscribe();
+  }, [userId, userRole, permissions]);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -50,34 +49,24 @@ export function QuestionCreator({ userId, userRole, permissions }: QuestionCreat
       </div>
 
       <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-        {folders.length === 0 ? (
-          <div className="text-center py-12">
-            <Folder size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No hay carpetas creadas</h3>
-            <p className="text-slate-500 dark:text-slate-400 mb-6">Debes crear al menos una carpeta en la Base de Datos antes de añadir preguntas.</p>
-          </div>
-        ) : (
-          activeTab === 'ai' ? <AIGenerator userId={userId} userRole={userRole} folders={folders} /> : <ManualCreator userId={userId} userRole={userRole} folders={folders} />
-        )}
+        {activeTab === 'ai' ? <AIGenerator userId={userId} userRole={userRole} existingTopics={topics} /> : <ManualCreator userId={userId} userRole={userRole} existingTopics={topics} />}
       </div>
     </div>
   );
 }
 
-function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 'admin' | 'student', folders: FolderType[] }) {
+function AIGenerator({ userId, userRole, existingTopics }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, classification: string}[] }) {
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [numQuestions, setNumQuestions] = useState<number | ''>(5);
   const [section, setSection] = useState('');
   const [customPrompt, setCustomPrompt] = useState('');
-  const [classification, setClassification] = useState('');
+  const [classification, setClassification] = useState<'Legislativo' | 'Específico'>('Legislativo');
   const [topic, setTopic] = useState('');
-  const [topics, setTopics] = useState<TopicType[]>([]);
   const [isNewTopic, setIsNewTopic] = useState(false);
   
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
-  const [promptAccess, setPromptAccess] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
@@ -88,55 +77,32 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
   const [attachedPdf, setAttachedPdf] = useState<any | null>(null);
   const [useAttachedPdf, setUseAttachedPdf] = useState(false);
 
-  const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
+  const availableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
 
   useEffect(() => {
-    if (classification) {
-      const folder = folders.find(f => f.name === classification);
-      if (folder) {
-        const unsubTopics = api.subscribeToTopicsByFolder(userId, folder.id, (t) => {
-          setTopics(t);
-        });
-        return () => unsubTopics();
-      }
-    } else {
-      setTopics([]);
-    }
-  }, [classification, folders, userId]);
-
-  useEffect(() => {
-    if (topic) {
+    if (topic && !isNewTopic) {
       api.getTopicResource(topic, classification).then(setAttachedPdf);
     } else {
       setAttachedPdf(null);
       setUseAttachedPdf(false);
     }
-  }, [topic, classification]);
+  }, [topic, classification, isNewTopic]);
 
   useEffect(() => {
-    if (classification && folders.length > 0 && !folders.find(f => f.name === classification)) {
-      setClassification(folders[0]?.name || '');
+    const currentAvailableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
+    if (!isNewTopic && currentAvailableTopics.length > 0 && !currentAvailableTopics.includes(topic)) {
+      setTopic(currentAvailableTopics[0] || '');
     }
-  }, [folders]);
+  }, [classification, existingTopics, isNewTopic, topic]);
 
   useEffect(() => {
-    if (classification && topics.length > 0 && !topics.find(t => t.name === topic)) {
-      setTopic(topics[0]?.name || '');
-    }
-  }, [classification, topics]);
+    loadPrompts();
+  }, []);
 
-  useEffect(() => {
-    const unsubPrompts = api.subscribeToSavedPrompts(userId, userRole, (prompts) => {
-      setSavedPrompts(prompts);
-    });
-    const unsubAccess = api.subscribeToPromptAccess(userId, (access) => {
-      setPromptAccess(access);
-    });
-    return () => {
-      unsubPrompts();
-      unsubAccess();
-    };
-  }, [userId, userRole]);
+  const loadPrompts = async () => {
+    const prompts = await api.getSavedPrompts();
+    setSavedPrompts(prompts);
+  };
 
   const handleSavePrompt = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -146,7 +112,8 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
 
   const confirmSavePrompt = async () => {
     if (promptTitle) {
-      await api.savePrompt(userId, promptTitle, customPrompt, userRole === 'admin', topic);
+      await api.savePrompt(promptTitle, customPrompt);
+      loadPrompts();
       setPromptModalOpen(false);
       setPromptTitle('');
     }
@@ -154,19 +121,11 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
 
   const handleGenerate = async () => {
     if (!text && !pdfFile && !url && !useAttachedPdf) {
-      setAlertModal({
-        isOpen: true,
-        title: 'Campos incompletos',
-        message: 'Debes proporcionar un texto base, subir un archivo PDF, introducir una URL o usar el PDF adjunto del tema.'
-      });
+      alert('Debes proporcionar un texto base, subir un archivo PDF, introducir una URL o usar el PDF adjunto del tema.');
       return;
     }
     if (!topic) {
-      setAlertModal({
-        isOpen: true,
-        title: 'Tema obligatorio',
-        message: 'El tema es obligatorio.'
-      });
+      alert('El tema es obligatorio.');
       return;
     }
     const finalNumQuestions = typeof numQuestions === 'number' && numQuestions > 0 ? numQuestions : 5;
@@ -194,33 +153,15 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       const questions = await api.generateAIQuestions({
         text: extraText, url, numQuestions: finalNumQuestions, section, customPrompt, classification, topic, fileData, existingQuestions: existingQuestions
       });
-      
-      if (questions.length === 0) {
-        setAlertModal({
-          isOpen: true,
-          title: 'Sin preguntas nuevas',
-          message: 'Todas las preguntas generadas ya existen en la base de datos para este tema.'
-        });
-        return;
-      }
-
       setPreviewQuestions(questions);
       setSuccessMsg(`¡Se generaron ${questions.length} preguntas! Revísalas abajo antes de guardar.`);
       playNotificationSound();
     } catch (e: any) {
       console.error(e);
       if (e.message?.toLowerCase().includes('quota') || e.message?.toLowerCase().includes('limit')) {
-        setAlertModal({
-          isOpen: true,
-          title: 'Límite excedido',
-          message: 'Has excedido el límite de uso de la IA gratuita. El modelo principal permite 2 peticiones por minuto y el secundario 15. Por favor, espera un minuto e inténtalo de nuevo. Si el problema persiste, es posible que hayas alcanzado el límite diario (50-1500 peticiones).'
-        });
+        alert('Has excedido el límite de uso de la IA gratuita. El modelo principal permite 2 peticiones por minuto y el secundario 15. Por favor, espera un minuto e inténtalo de nuevo. Si el problema persiste, es posible que hayas alcanzado el límite diario (50-1500 peticiones).');
       } else {
-        setAlertModal({
-          isOpen: true,
-          title: 'Error de generación',
-          message: `Error al generar preguntas: ${e.message || 'Error desconocido'}. Si usas un PDF, asegúrate de que no sea demasiado grande.`
-        });
+        alert(`Error al generar preguntas: ${e.message || 'Error desconocido'}. Si usas un PDF, asegúrate de que no sea demasiado grande.`);
       }
     } finally {
       setLoading(false);
@@ -246,20 +187,9 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       const duplicatesCount = previewQuestions.length - uniqueQuestions.length;
 
       if (uniqueQuestions.length === 0) {
-        setAlertModal({
-          isOpen: true,
-          title: 'Preguntas duplicadas',
-          message: 'Todas las preguntas generadas ya existen en la base de datos para este tema.'
-        });
+        alert('Todas las preguntas generadas ya existen en la base de datos para este tema.');
         setLoading(false);
         return;
-      }
-
-      if (isNewTopic && topic) {
-        const folder = folders.find(f => f.name === classification);
-        if (folder) {
-          await api.createTopic(userId, folder.id, topic);
-        }
       }
 
       const sourcePdfName = pdfFile ? pdfFile.name : undefined;
@@ -283,11 +213,7 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
       console.error(e);
-      setAlertModal({
-        isOpen: true,
-        title: 'Error al guardar',
-        message: 'Error al guardar las preguntas.'
-      });
+      alert('Error al guardar las preguntas.');
     } finally {
       setLoading(false);
     }
@@ -317,11 +243,7 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
       if (file.type === 'application/pdf') {
         setPdfFile(file);
       } else {
-        setAlertModal({
-          isOpen: true,
-          title: 'Archivo inválido',
-          message: 'Por favor, sube un archivo PDF válido.'
-        });
+        alert('Por favor, sube un archivo PDF válido.');
       }
     }
   };
@@ -333,16 +255,16 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
           <label className="block text-sm font-medium text-slate-700 mb-2">Clasificación</label>
           <select 
             value={classification} 
-            onChange={(e) => setClassification(e.target.value)}
+            onChange={(e) => setClassification(e.target.value as any)}
             className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
           >
-            <option value="" disabled>Selecciona una carpeta...</option>
-            {folders.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+            <option value="Legislativo">Legislativo</option>
+            <option value="Específico">Específico</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Tema</label>
-          {!isNewTopic && topics.length > 0 ? (
+          {!isNewTopic && availableTopics.length > 0 ? (
             <div className="flex gap-2">
               <select 
                 value={topic} 
@@ -350,7 +272,7 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
                 className="flex-1 min-w-0 truncate px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               >
                 <option value="" disabled>Selecciona un tema...</option>
-                {topics.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                {availableTopics.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <button 
                 onClick={() => { setIsNewTopic(true); setTopic(''); }}
@@ -368,7 +290,7 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
                 className="flex-1 min-w-0 px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Nombre del nuevo tema"
               />
-              {topics.length > 0 && (
+              {availableTopics.length > 0 && (
                 <button 
                   onClick={() => { setIsNewTopic(false); setTopic(''); }}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors"
@@ -499,26 +421,16 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
         {savedPrompts.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="text-xs text-slate-500 py-1">Indicaciones guardadas:</span>
-            {savedPrompts.map(p => {
-              const isLocked = p.isAdminPrompt && userRole !== 'admin' && !promptAccess[p.id];
-              return (
-                <button 
-                  key={p.id}
-                  type="button"
-                  onClick={() => !isLocked && setCustomPrompt(p.prompt)}
-                  disabled={isLocked}
-                  className={`text-xs px-2 py-1 rounded-md transition-colors flex items-center gap-1 ${
-                    isLocked 
-                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200' 
-                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100'
-                  }`}
-                  title={isLocked ? 'Esta indicación del administrador requiere permiso' : p.title}
-                >
-                  {isLocked ? <Lock size={10} /> : (p.isAdminPrompt ? <Unlock size={10} className="text-indigo-400" /> : null)}
-                  {p.title}
-                </button>
-              );
-            })}
+            {savedPrompts.map(p => (
+              <button 
+                key={p.id}
+                type="button"
+                onClick={() => setCustomPrompt(p.prompt)}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-md transition-colors"
+              >
+                {p.title}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -632,87 +544,37 @@ function AIGenerator({ userId, userRole, folders }: { userId: string, userRole: 
           </div>
         </div>
       )}
-
-      {/* Alert Modal */}
-      {alertModal.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle size={32} className="text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{alertModal.title}</h3>
-            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{alertModal.message}</p>
-            <button 
-              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
-              className="w-full bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all"
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function ManualCreator({ userId, userRole, folders }: { userId: string, userRole: 'admin' | 'student', folders: FolderType[] }) {
+function ManualCreator({ userId, userRole, existingTopics }: { userId: string, userRole: 'admin' | 'student', existingTopics: {topic: string, classification: string}[] }) {
   const [text, setText] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctIndex, setCorrectIndex] = useState(0);
-  const [classification, setClassification] = useState('');
+  const [classification, setClassification] = useState<'Legislativo' | 'Específico'>('Legislativo');
   const [topic, setTopic] = useState('');
-  const [topics, setTopics] = useState<TopicType[]>([]);
   const [isNewTopic, setIsNewTopic] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
-
-  useEffect(() => {
-    if (classification) {
-      const folder = folders.find(f => f.name === classification);
-      if (folder) {
-        const unsubTopics = api.subscribeToTopicsByFolder(userId, folder.id, (t) => {
-          setTopics(t);
-        });
-        return () => unsubTopics();
-      }
-    } else {
-      setTopics([]);
-    }
-  }, [classification, folders, userId]);
+  const availableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
 
   useEffect(() => {
-    if (classification && folders.length > 0 && !folders.find(f => f.name === classification)) {
-      setClassification(folders[0]?.name || '');
+    const currentAvailableTopics = existingTopics.filter(t => t.classification === classification).map(t => t.topic);
+    if (!isNewTopic && currentAvailableTopics.length > 0 && !currentAvailableTopics.includes(topic)) {
+      setTopic(currentAvailableTopics[0] || '');
     }
-  }, [folders]);
-
-  useEffect(() => {
-    if (classification && topics.length > 0 && !topics.find(t => t.name === topic)) {
-      setTopic(topics[0]?.name || '');
-    }
-  }, [classification, topics]);
+  }, [classification, existingTopics, isNewTopic, topic]);
 
   const handleSave = async () => {
     if (!text || !topic || options.some(o => !o)) {
-      setAlertModal({
-        isOpen: true,
-        title: 'Campos incompletos',
-        message: 'Rellena todos los campos.'
-      });
+      alert('Rellena todos los campos.');
       return;
     }
     
     setLoading(true);
     try {
-      if (isNewTopic && topic) {
-        const folder = folders.find(f => f.name === classification);
-        if (folder) {
-          await api.createTopic(userId, folder.id, topic);
-        }
-      }
-
       const existingQuestions = await api.getQuestionsByTopic(userId, topic, classification, userRole);
       const cleanNewText = text.trim().toLowerCase().replace(/[.,;:?¿!¡]/g, '');
       const isDuplicate = existingQuestions.some(existingQ => {
@@ -723,11 +585,7 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
       });
 
       if (isDuplicate) {
-        setAlertModal({
-          isOpen: true,
-          title: 'Pregunta duplicada',
-          message: 'Esta pregunta con estas mismas respuestas ya existe en la base de datos para este tema.'
-        });
+        alert('Esta pregunta con estas mismas respuestas ya existe en la base de datos para este tema.');
         setLoading(false);
         return;
       }
@@ -745,11 +603,7 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (e) {
       console.error(e);
-      setAlertModal({
-        isOpen: true,
-        title: 'Error al guardar',
-        message: 'Error al guardar la pregunta.'
-      });
+      alert('Error al guardar la pregunta.');
     } finally {
       setLoading(false);
     }
@@ -762,16 +616,16 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Clasificación</label>
           <select 
             value={classification} 
-            onChange={(e) => setClassification(e.target.value)}
+            onChange={(e) => setClassification(e.target.value as any)}
             className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
           >
-            <option value="" disabled>Selecciona una carpeta...</option>
-            {folders.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+            <option value="Legislativo">Legislativo</option>
+            <option value="Específico">Específico</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tema</label>
-          {!isNewTopic && topics.length > 0 ? (
+          {!isNewTopic && availableTopics.length > 0 ? (
             <div className="flex gap-2">
               <select 
                 value={topic} 
@@ -779,7 +633,7 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
                 className="flex-1 min-w-0 truncate px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
               >
                 <option value="" disabled>Selecciona un tema...</option>
-                {topics.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                {availableTopics.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <button 
                 onClick={() => { setIsNewTopic(true); setTopic(''); }}
@@ -797,7 +651,7 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
                 className="flex-1 min-w-0 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900 dark:text-white"
                 placeholder="Nombre del nuevo tema"
               />
-              {topics.length > 0 && (
+              {availableTopics.length > 0 && (
                 <button 
                   onClick={() => { setIsNewTopic(false); setTopic(''); }}
                   className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-lg transition-colors"
@@ -858,25 +712,6 @@ function ManualCreator({ userId, userRole, folders }: { userId: string, userRole
       {successMsg && (
         <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-center font-medium border border-emerald-100 dark:border-emerald-800">
           {successMsg}
-        </div>
-      )}
-
-      {/* Alert Modal */}
-      {alertModal.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle size={32} className="text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{alertModal.title}</h3>
-            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{alertModal.message}</p>
-            <button 
-              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
-              className="w-full bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all"
-            >
-              Entendido
-            </button>
-          </div>
         </div>
       )}
     </div>

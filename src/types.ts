@@ -32,7 +32,7 @@ export interface Question {
   text: string;
   options: string[];
   correctOptionIndex: number;
-  classification: string;
+  classification: 'Legislativo' | 'Específico';
   topic: string;
   hits: number;
   misses: number;
@@ -58,18 +58,6 @@ export interface SavedPrompt {
   id: string;
   title: string;
   prompt: string;
-  userId: string;
-  isAdminPrompt?: boolean;
-  topic?: string;
-  createdAt: string;
-}
-
-export interface PromptAccess {
-  id: string;
-  userId: string;
-  promptId: string;
-  granted: boolean;
-  grantedAt?: string;
 }
 
 export interface ReviewHistory {
@@ -117,20 +105,5 @@ export interface SurveyResponse {
   userName: string;
   userPhoto?: string;
   answer: string;
-  createdAt: string;
-}
-
-export interface Folder {
-  id: string;
-  name: string;
-  userId: string;
-  createdAt: string;
-}
-
-export interface Topic {
-  id: string;
-  name: string;
-  folderId: string;
-  userId: string;
   createdAt: string;
 }

@@ -31,7 +31,7 @@ export function QuestionDetailsModal({ question, userId, userRole, permissions, 
   const [comments, setComments] = useState<string[]>(question.comments || []);
   const [newComment, setNewComment] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<{
-    classification: string;
+    classification: 'Legislativo' | 'Específico';
     topic: string;
   }>({ 
     classification: question.classification, 

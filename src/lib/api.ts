@@ -1,4 +1,4 @@
-import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback, SurveyResponse, PromptAccess, Folder, Topic } from '../types';
+import { Question, SavedPrompt, ReviewHistory, TestSession, User, Feedback, SurveyResponse } from '../types';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, writeBatch, getDoc, runTransaction, increment, onSnapshot, setDoc, deleteField } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -74,73 +74,6 @@ async function getNextDisplayId(count: number = 1): Promise<number> {
 }
 
 export const api = {
-  subscribeToFolders(userId: string, callback: (folders: Folder[]) => void): () => void {
-    const q = query(collection(db, 'folders'), where('userId', '==', userId));
-    return onSnapshot(q, (snapshot) => {
-      const folders = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Folder))
-        .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-      callback(folders);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'folders');
-    });
-  },
-
-  subscribeToTopicsByFolder(userId: string, folderId: string, callback: (topics: Topic[]) => void): () => void {
-    const q = query(collection(db, 'topics'), where('userId', '==', userId), where('folderId', '==', folderId));
-    return onSnapshot(q, (snapshot) => {
-      const topics = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Topic))
-        .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-      callback(topics);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'topics');
-    });
-  },
-
-  async createFolder(userId: string, name: string): Promise<void> {
-    try {
-      await addDoc(collection(db, 'folders'), {
-        name,
-        userId,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'folders');
-    }
-  },
-
-  async createTopic(userId: string, folderId: string, name: string): Promise<void> {
-    try {
-      await addDoc(collection(db, 'topics'), {
-        name,
-        folderId,
-        userId,
-        createdAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'topics');
-    }
-  },
-
-  async deleteFolder(folderId: string): Promise<void> {
-    try {
-      await deleteDoc(doc(db, 'folders', folderId));
-      // Optionally delete all topics and questions in this folder
-      // For now, we'll just delete the folder
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `folders/${folderId}`);
-    }
-  },
-
-  async deleteTopic(topicId: string): Promise<void> {
-    try {
-      await deleteDoc(doc(db, 'topics', topicId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `topics/${topicId}`);
-    }
-  },
-
   subscribeToQuestions(userId: string, userRole: 'admin' | 'student', permissions: string[], callback: (questions: Question[]) => void): () => void {
     const q = query(collection(db, 'questions'));
     return onSnapshot(q, (snapshot) => {
@@ -152,11 +85,9 @@ export const api = {
   },
 
   subscribeToTestSessions(userId: string, callback: (sessions: TestSession[]) => void): () => void {
-    const q = query(collection(db, 'test_sessions'), where('userId', '==', userId));
+    const q = query(collection(db, 'test_sessions'), where('userId', '==', userId), orderBy('completedAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
-      const sessions = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as TestSession))
-        .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+      const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TestSession));
       callback(sessions);
     });
   },
@@ -657,139 +588,25 @@ export const api = {
     }
   },
 
-  async getSavedPrompts(userId: string, userRole: 'admin' | 'student'): Promise<SavedPrompt[]> {
+  async getSavedPrompts(): Promise<SavedPrompt[]> {
     try {
       const snapshot = await getDocs(collection(db, 'saved_prompts'));
-      const prompts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
-      
-      // Filter: own prompts OR admin prompts
-      return prompts.filter(p => 
-        userRole === 'admin' || 
-        p.userId === userId || 
-        p.isAdminPrompt === true
-      ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
       return [];
     }
   },
 
-  subscribeToSavedPrompts(userId: string, userRole: 'admin' | 'student', callback: (prompts: SavedPrompt[]) => void): () => void {
-    const q = query(collection(db, 'saved_prompts'));
-    return onSnapshot(q, (snapshot) => {
-      const prompts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
-      const filtered = prompts.filter(p => 
-        userRole === 'admin' || 
-        p.userId === userId || 
-        p.isAdminPrompt === true
-      ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      callback(filtered);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
-    });
-  },
-
-  async savePrompt(userId: string, title: string, prompt: string, isAdminPrompt: boolean = false, topic?: string): Promise<void> {
-    try {
-      await addDoc(collection(db, 'saved_prompts'), { 
-        title, 
-        prompt, 
-        userId, 
-        isAdminPrompt, 
-        topic,
-        createdAt: new Date().toISOString() 
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'saved_prompts');
-    }
-  },
-
-  async deletePrompt(id: string): Promise<void> {
-    try {
-      await deleteDoc(doc(db, 'saved_prompts', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `saved_prompts/${id}`);
-    }
-  },
-
-  async getPromptAccess(userId: string): Promise<Record<string, boolean>> {
-    try {
-      const q = query(collection(db, 'prompt_access'), where('userId', '==', userId), where('granted', '==', true));
-      const snapshot = await getDocs(q);
-      const access: Record<string, boolean> = {};
-      snapshot.docs.forEach(doc => {
-        access[doc.data().promptId] = true;
-      });
-      return access;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'prompt_access');
-      return {};
-    }
-  },
-
-  async grantPromptAccess(userId: string, promptId: string): Promise<void> {
-    try {
-      const accessId = `${userId}_${promptId}`;
-      await setDoc(doc(db, 'prompt_access', accessId), {
-        userId,
-        promptId,
-        granted: true,
-        grantedAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'prompt_access');
-    }
-  },
-
-  async revokePromptAccess(userId: string, promptId: string): Promise<void> {
-    const accessId = `${userId}_${promptId}`;
-    try {
-      await deleteDoc(doc(db, 'prompt_access', accessId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `prompt_access/${accessId}`);
-    }
-  },
-
-  subscribeToPromptAccess(userId: string, callback: (access: Record<string, boolean>) => void): () => void {
-    const q = query(collection(db, 'prompt_access'), where('userId', '==', userId), where('granted', '==', true));
-    return onSnapshot(q, (snapshot) => {
-      const access: Record<string, boolean> = {};
-      snapshot.docs.forEach(doc => {
-        access[doc.data().promptId] = true;
-      });
-      callback(access);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'prompt_access');
-    });
-  },
-
-  subscribeToAllPromptAccess(callback: (access: PromptAccess[]) => void): () => void {
-    const q = query(collection(db, 'prompt_access'));
-    return onSnapshot(q, (snapshot) => {
-      const access = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PromptAccess));
-      callback(access);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'prompt_access');
-    });
-  },
-
-  subscribeToAdminPrompts(callback: (prompts: SavedPrompt[]) => void): () => void {
-    const q = query(collection(db, 'saved_prompts'), where('isAdminPrompt', '==', true));
-    return onSnapshot(q, (snapshot) => {
-      const prompts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SavedPrompt));
-      callback(prompts);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'saved_prompts');
-    });
+  async savePrompt(title: string, prompt: string): Promise<void> {
+    await addDoc(collection(db, 'saved_prompts'), { title, prompt });
   },
 
   async getTestSessions(userId: string): Promise<TestSession[]> {
     try {
-      const q = query(collection(db, 'test_sessions'), where('userId', '==', userId));
+      const q = query(collection(db, 'test_sessions'), where('userId', '==', userId), orderBy('completedAt', 'desc'));
       const snapshot = await getDocs(q);
-      return snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as TestSession))
-        .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TestSession));
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'test_sessions');
       return [];

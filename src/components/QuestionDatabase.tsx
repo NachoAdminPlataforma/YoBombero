@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
-import { Question, User as AppUser, ReviewHistory, Folder as FolderType, Topic as TopicType } from '../types';
-import { Folder, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Edit2, Trash2, Clock, CheckCircle2, XCircle, ArrowLeft, Save, X, Search, Database, FileText, Star, MessageSquare, AlertTriangle, ListFilter, LayoutGrid, Move, Upload, File as FileIcon, Loader2, Plus } from 'lucide-react';
+import { Question, User as AppUser, ReviewHistory } from '../types';
+import { Folder, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Edit2, Trash2, Clock, CheckCircle2, XCircle, ArrowLeft, Save, X, Search, Database, FileText, Star, MessageSquare, AlertTriangle, ListFilter, LayoutGrid, Move, Upload, File as FileIcon, Loader2 } from 'lucide-react';
 import { QuestionDetailsModal } from './QuestionDetailsModal';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -236,8 +236,6 @@ interface QuestionDatabaseProps {
 
 export function QuestionDatabase({ userId, userRole, permissions, appUser }: QuestionDatabaseProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [folders, setFolders] = useState<FolderType[]>([]);
-  const [topics, setTopics] = useState<TopicType[]>([]);
   const [currentPath, setCurrentPath] = useState<string[]>([]); // [] -> ['Legislativo'] -> ['Legislativo', 'Tema 1']
   const [loading, setLoading] = useState(true);
   const [searchId, setSearchId] = useState('');
@@ -245,10 +243,6 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
   const [topicSort, setTopicSort] = useState<'default' | 'newest' | 'oldest'>('default');
   const [isRecentExpanded, setIsRecentExpanded] = useState(true);
-
-  const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
-  const [isCreateTopicModalOpen, setIsCreateTopicModalOpen] = useState(false);
-  const [newItemName, setNewItemName] = useState('');
 
   useEffect(() => {
   }, [currentPath, searchId, searchText, topicSort]);
@@ -289,9 +283,6 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       setTopicResource(null);
     }
   }, [currentPath]);
-
-  const [alertModal, setAlertModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
-  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, title: string, message: string, onConfirm: () => void}>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const extractTextFromPDF = async (file: File): Promise<string> => {
     // Dynamically import pdfjs-dist to prevent Vite build/load errors
@@ -337,56 +328,27 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       setUploadingPdf(false);
     } catch (error) {
       console.error("Error uploading PDF:", error);
-      setAlertModal({
-        isOpen: true,
-        title: 'Error de PDF',
-        message: 'Error al procesar el PDF. Asegúrate de que no esté protegido.'
-      });
+      alert("Error al procesar el PDF. Asegúrate de que no esté protegido.");
       setUploadingPdf(false);
     }
   };
 
   const handleDeleteResource = async () => {
     if (!topicResource) return;
-    setConfirmModal({
-      isOpen: true,
-      title: 'Eliminar PDF',
-      message: '¿Estás seguro de que quieres eliminar el PDF adjunto a este tema?',
-      onConfirm: async () => {
-        await api.deleteTopicResource(topicResource.id);
-        setTopicResource(null);
-      }
-    });
+    if (confirm('¿Estás seguro de que quieres eliminar el PDF adjunto a este tema?')) {
+      await api.deleteTopicResource(topicResource.id);
+      setTopicResource(null);
+    }
   };
 
   useEffect(() => {
     setLoading(true);
-    const unsubQuestions = api.subscribeToQuestions(userId, userRole, permissions, (data) => {
+    const unsubscribe = api.subscribeToQuestions(userId, userRole, permissions, (data) => {
       setQuestions(data);
       setLoading(false);
     });
-
-    const unsubFolders = api.subscribeToFolders(userId, (data) => {
-      setFolders(data);
-    });
-
-    return () => {
-      unsubQuestions();
-      unsubFolders();
-    };
+    return () => unsubscribe();
   }, [userId, userRole, permissions]);
-
-  useEffect(() => {
-    if (currentPath.length === 1) {
-      const folder = folders.find(f => f.name === currentPath[0]);
-      if (folder) {
-        const unsubTopics = api.subscribeToTopicsByFolder(userId, folder.id, (data) => {
-          setTopics(data);
-        });
-        return () => unsubTopics();
-      }
-    }
-  }, [currentPath, folders, userId]);
 
   useEffect(() => {
     setSelectedQuestionIds(new Set());
@@ -515,11 +477,7 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       }
     } catch (error) {
       console.error("Error deleting question(s):", error);
-      setAlertModal({
-        isOpen: true,
-        title: 'Error al eliminar',
-        message: 'Hubo un error al eliminar las preguntas.'
-      });
+      alert("Hubo un error al eliminar.");
     } finally {
       setLoading(false);
       setDeleteConfirmation({ isOpen: false, isBulk: false });
@@ -680,47 +638,6 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
     );
   };
 
-  const handleCreateFolder = async () => {
-    if (!newItemName.trim()) return;
-    await api.createFolder(userId, newItemName.trim());
-    setNewItemName('');
-    setIsCreateFolderModalOpen(false);
-  };
-
-  const handleCreateTopic = async () => {
-    if (!newItemName.trim() || currentPath.length === 0) return;
-    const folder = folders.find(f => f.name === currentPath[0]);
-    if (folder) {
-      await api.createTopic(userId, folder.id, newItemName.trim());
-      setNewItemName('');
-      setIsCreateTopicModalOpen(false);
-    }
-  };
-
-  const handleDeleteFolder = async (folderId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConfirmModal({
-      isOpen: true,
-      title: 'Eliminar Carpeta',
-      message: '¿Estás seguro de que quieres eliminar esta carpeta? Se eliminarán también todos sus temas.',
-      onConfirm: async () => {
-        await api.deleteFolder(folderId);
-      }
-    });
-  };
-
-  const handleDeleteTopic = async (topicId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConfirmModal({
-      isOpen: true,
-      title: 'Eliminar Tema',
-      message: '¿Estás seguro de que quieres eliminar este tema?',
-      onConfirm: async () => {
-        await api.deleteTopic(topicId);
-      }
-    });
-  };
-
   // View rendering logic
   const renderContent = () => {
     if (loading) return <div className="text-center py-12 text-slate-500">Cargando...</div>;
@@ -770,8 +687,9 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       );
     }
 
-    // Level 0: Folders and Recent
+    // Level 0: Classifications and Recent
     if (currentPath.length === 0) {
+      const classifications = ['Legislativo', 'Específico'];
       const recentQuestions = [...questions].sort((a, b) => {
         const dateA = a.createdAt || '2000-01-01T00:00:00.000Z';
         const dateB = b.createdAt || '2000-01-01T00:00:00.000Z';
@@ -783,43 +701,28 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
       return (
         <div className="space-y-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {folders.map(f => {
-              const count = questions.filter(q => q.classification === f.name).length;
+            {classifications.map(c => {
+              const count = questions.filter(q => q.classification === c).length;
               return (
-                <div key={f.id} className="relative group">
-                  <button 
-                    onClick={() => navigateTo([f.name])}
-                    data-folder-path={f.name}
-                    className={`w-full bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border transition-all flex items-center justify-between group text-left border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-md`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        <Folder size={24} />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">{f.name}</h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">{count} preguntas</p>
-                      </div>
+                <button 
+                  key={c}
+                  onClick={() => navigateTo([c])}
+                  data-folder-path={c}
+                  className={`bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border transition-all flex items-center justify-between group text-left border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-md`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <Folder size={24} />
                     </div>
-                    <ChevronRight className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
-                  </button>
-                  <button 
-                    onClick={(e) => handleDeleteFolder(f.id, e)}
-                    className="absolute top-2 right-2 p-2 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">{c}</h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">{count} preguntas</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                </button>
               );
             })}
-            
-            <button 
-              onClick={() => setIsCreateFolderModalOpen(true)}
-              className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-3 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-all group"
-            >
-              <Plus size={24} className="group-hover:scale-110 transition-transform" />
-              <span className="font-bold">Nueva Carpeta</span>
-            </button>
           </div>
 
           {recentQuestions.length > 0 && (
@@ -874,28 +777,31 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
     if (currentPath.length === 1) {
       const classification = currentPath[0];
       const filteredQs = questions.filter(q => q.classification === classification);
-      
+      const topics = Array.from(new Set(filteredQs.map(q => q.topic))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+      if (topics.length === 0) return <div className="text-center py-12 text-slate-500 dark:text-slate-400">No hay temas en esta clasificación.</div>;
+
       return (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {topics.map(t => {
-            const topicQs = filteredQs.filter(q => q.topic === t.name);
+            const topicQs = filteredQs.filter(q => q.topic === t);
             const count = topicQs.length;
             const newCount = topicQs.filter(q => (q.hits || 0) === 0 && (q.misses || 0) === 0).length;
             
             return (
               <div 
-                key={t.id} 
-                data-folder-path={`${classification}::${t.name}`}
+                key={t} 
+                data-folder-path={`${classification}::${t}`}
                 className={`bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border transition-all group relative border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-md`}
               >
                 <button 
-                  onClick={() => navigateTo([classification, t.name])}
+                  onClick={() => navigateTo([classification, t])}
                   className="w-full flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-3">
                     <Folder size={20} className="text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
                     <div>
-                      <h4 className="font-semibold text-slate-800 dark:text-slate-200">{t.name}</h4>
+                      <h4 className="font-semibold text-slate-800 dark:text-slate-200">{t}</h4>
                       <div className="flex items-center gap-2">
                         <p className="text-xs text-slate-500 dark:text-slate-400">{count} preguntas</p>
                         {newCount > 0 && (
@@ -911,41 +817,24 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                   </div>
                   <ChevronRight size={16} className="text-slate-300 dark:text-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
                 </button>
-                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingTopic({
-                        oldTopic: t.name,
-                        oldClassification: classification,
-                        newTopic: t.name,
-                        newClassification: classification
-                      });
-                    }}
-                    className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg"
-                    title="Editar tema"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button 
-                    onClick={(e) => handleDeleteTopic(t.id, e)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                    title="Eliminar tema"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTopic({
+                      oldTopic: t,
+                      oldClassification: classification,
+                      newTopic: t,
+                      newClassification: classification
+                    });
+                  }}
+                  className="absolute top-2 right-2 p-1.5 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                  title="Editar carpeta"
+                >
+                  <Edit2 size={14} />
+                </button>
               </div>
             );
           })}
-          
-          <button 
-            onClick={() => setIsCreateTopicModalOpen(true)}
-            className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-3 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-all group min-h-[80px]"
-          >
-            <Plus size={20} className="group-hover:scale-110 transition-transform" />
-            <span className="font-bold">Nuevo Tema</span>
-          </button>
         </div>
       );
     }
@@ -1289,100 +1178,12 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
           }}
         />
       )}
-      {/* Create Folder Modal */}
-      {isCreateFolderModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Nueva Carpeta</h2>
-              <button 
-                onClick={() => setIsCreateFolderModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre de la Carpeta</label>
-                <input 
-                  type="text"
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  placeholder="Ej: Legislativo, Específico..."
-                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  autoFocus
-                />
-              </div>
-              <div className="pt-4 flex justify-end gap-2">
-                <button 
-                  onClick={() => setIsCreateFolderModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleCreateFolder}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
-                >
-                  Crear Carpeta
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Topic Modal */}
-      {isCreateTopicModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Nuevo Tema</h2>
-              <button 
-                onClick={() => setIsCreateTopicModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre del Tema</label>
-                <input 
-                  type="text"
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  placeholder="Ej: Tema 1, Constitución..."
-                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  autoFocus
-                />
-              </div>
-              <div className="pt-4 flex justify-end gap-2">
-                <button 
-                  onClick={() => setIsCreateTopicModalOpen(false)}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg font-medium transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleCreateTopic}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
-                >
-                  Crear Tema
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Edit Topic Modal */}
       {editingTopic && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Editar Tema</h2>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Editar Carpeta</h2>
               <button 
                 onClick={() => setEditingTopic(null)}
                 className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
@@ -1392,15 +1193,14 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Carpeta</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Clasificación</label>
                 <select 
                   value={editingTopic.newClassification}
                   onChange={(e) => setEditingTopic({...editingTopic, newClassification: e.target.value})}
                   className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                 >
-                  {folders.map(f => (
-                    <option key={f.id} value={f.name}>{f.name}</option>
-                  ))}
+                  <option value="Legislativo">Legislativo</option>
+                  <option value="Específico">Específico</option>
                 </select>
               </div>
               <div>
@@ -1458,54 +1258,6 @@ export function QuestionDatabase({ userId, userRole, permissions, appUser }: Que
                   Sí, eliminar
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Alert Modal */}
-      {alertModal.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{alertModal.title}</h3>
-            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{alertModal.message}</p>
-            <button 
-              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
-              className="w-full bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all"
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Confirm Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-sm w-full p-8 border border-slate-200 dark:border-slate-700 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Trash2 size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white text-center mb-2">{confirmModal.title}</h3>
-            <p className="text-slate-600 dark:text-slate-400 text-center mb-8">{confirmModal.message}</p>
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-                className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-xl transition-all"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={() => {
-                  confirmModal.onConfirm();
-                  setConfirmModal({ ...confirmModal, isOpen: false });
-                }}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-rose-200 dark:shadow-none"
-              >
-                Confirmar
-              </button>
             </div>
           </div>
         </div>

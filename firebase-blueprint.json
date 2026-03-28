@@ -41,25 +41,12 @@
       "type": "object",
       "properties": {
         "title": { "type": "string" },
-        "prompt": { "type": "string" },
         "userId": { "type": "string" },
         "isAdminPrompt": { "type": "boolean" },
         "topic": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "prompt", "userId"]
-    },
-    "PromptAccess": {
-      "title": "PromptAccess",
-      "description": "Access grant for an admin prompt to a specific user",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "promptId": { "type": "string" },
-        "granted": { "type": "boolean" },
-        "grantedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["userId", "promptId", "granted"]
+      "required": ["title", "userId"]
     },
     "PromptContent": {
       "title": "PromptContent",
